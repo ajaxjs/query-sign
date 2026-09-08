@@ -511,7 +511,8 @@ if (willPublishPhp) {
       log.ok(`已在 Packagist 创建包（${repo}）`);
     } else {
       log.info(`create-package 返回 ${created.status}，按「包已存在」处理，改为触发更新`);
-      const updated = await callPackagist('update-package', username, token, { url: repo });
+      // 字段名与 create-package 相同，都是 repository（不是 url）
+      const updated = await callPackagist('update-package', username, token, { repository: repo });
       if (updated.ok) {
         log.ok(`已触发 Packagist 更新（${repo}）`);
       } else {
@@ -769,29 +770,34 @@ function runSubtreeSplit(target) {
 }
 
 /**
- * 调用 Packagist API。
+ * 调用 Packagist API（格式依据 https://packagist.org/apidoc）。
  *
- * 两个容易踩错的点：
+ * 三处容易搞错、且本次发布实测踩过的点：
  *
- * 1. 业务参数必须放在 **JSON body** 里——`create-package` 读 body 的 `repository`，
- *    `update-package` 读 body 的 `url`。拼到 query string 上不会被识别。
- * 2. 认证用 HTTP Basic，不把 apiToken 拼进 URL。URL 会随 fetch 的错误消息、
- *    代理日志一起外泄，而 Authorization 头只存在于本次请求中。
+ * 1. 认证头是 `Authorization: Bearer USERNAME:API_TOKEN` —— 既不是 HTTP Basic
+ *    的 base64，也不是早期文档里的 `?username=&apiToken=` query string。
+ *    用错会被拒成 406「Missing or invalid payload」，看起来像 body 格式问题，
+ *    实际是认证方式不被接受。
+ * 2. create-package 与 update-package 的 body 字段**都叫 `repository`**。
+ *    update-package 用 `url` 是错的（网上流传的旧 curl 示例仍这么写）。
+ * 3. create-package 属于 UNSAFE 端点，只接受 main API token；若配置的是
+ *    safe token，建包会失败，只能走 update-package 或到网页手动提交。
+ *
+ * token 只出现在请求头里、不进 URL，因此不会随错误消息或代理日志外泄。
  */
 async function callPackagist(endpoint, username, token, payload) {
-  const auth = Buffer.from(`${username}:${token}`).toString('base64');
   try {
     const response = await fetch(`https://packagist.org/api/${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Basic ${auth}`,
+        Authorization: `Bearer ${username}:${token}`,
       },
       body: JSON.stringify(payload),
     });
     return { ok: response.ok, status: response.status, body: await response.text() };
   } catch (err) {
-    // 网络故障与 HTTP 错误统一成 status 0，调用方只需看 ok 与 status
-    return { ok: false, status: 0, body: err.message };
+    // 只回传 err.name：部分实现的错误文本会带上请求头或 URL
+    return { ok: false, status: 0, body: `network error (${err.name})` };
   }
 }
