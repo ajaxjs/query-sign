@@ -1,7 +1,7 @@
 {
-  "name": "query-sign",
+  "name": "query-sign-node",
   "version": "1.0.0",
-  "description": "跨语言一致的请求数据签名（HMAC）库。TypeScript 实现，与 PHP 版本 query-sign 产生完全相同的签名。",
+  "description": "跨语言一致的请求数据签名（HMAC）库。TypeScript 实现，与 Composer 包 ajaxjs/query-sign-php 产生完全相同的签名。",
   "keywords": [
     "sign",
     "signature",
@@ -13,7 +13,7 @@
     "php-compatible"
   ],
   "license": "MIT",
-  "author": "",
+  "author": "ajaxjs",
   "type": "module",
   "main": "./dist/cjs/query-sign.js",
   "module": "./dist/esm/query-sign.js",
@@ -42,13 +42,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/OWNER/query-sign.git",
-    "directory": "nodejs"
+    "url": "git+https://github.com/ajaxjs/query-sign-node.git"
   },
   "bugs": {
-    "url": "https://github.com/OWNER/query-sign/issues"
+    "url": "https://github.com/ajaxjs/query-sign-node/issues"
   },
-  "homepage": "https://github.com/OWNER/query-sign#readme",
+  "homepage": "https://github.com/ajaxjs/query-sign-node#readme",
   "publishConfig": {
     "access": "public"
   },

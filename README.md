@@ -5,13 +5,14 @@
 同一份数据、同一个密钥，**不同语言的实现产出的签名逐字节相同**——
 一端签名、另一端验签，不需要任何适配层。
 
-| 语言 | 包 | 实现 |
-| --- | --- | --- |
-| Node.js / TypeScript | [`query-sign`](https://www.npmjs.com/package/query-sign) | [`nodejs/`](./nodejs/README.md)，基于 `node:crypto` |
-| PHP | [`your-vendor/query-sign`](https://packagist.org/packages/your-vendor/query-sign) | [`php/`](./php/README.md)，基于 `hash_hmac` |
+| 语言 | 包 | 独立仓库 | 实现 |
+| --- | --- | --- | --- |
+| Node.js / TypeScript | [`query-sign-node`](https://www.npmjs.com/package/query-sign-node) | [`ajaxjs/query-sign-node`](https://github.com/ajaxjs/query-sign-node) | [`nodejs/`](./nodejs/README.md)，基于 `node:crypto` |
+| PHP | [`ajaxjs/query-sign-php`](https://packagist.org/packages/ajaxjs/query-sign-php) | [`ajaxjs/query-sign-php`](https://github.com/ajaxjs/query-sign-php) | [`php/`](./php/README.md)，基于 `hash_hmac` |
 
-> 两端目前均**尚未发布**到公共仓库，仓库地址与 PHP 包名仍是占位符。
-> 见下方 [发布前必须替换的占位符](#发布前必须替换的占位符)。
+本仓库是 **monorepo**，承载跨语言规范（[`docs/SPEC.md`](./docs/SPEC.md)）、共享测试资产
+和一键发布脚本；两个语言实现各自拆分为独立仓库，便于独立开发与发布，
+内容由本仓库通过 `git subtree split` 同步过去。
 
 ---
 
@@ -42,7 +43,7 @@
 ### Node.js
 
 ```js
-import { QuerySign } from 'query-sign';
+import { QuerySign } from 'query-sign-node';
 
 const qs = new QuerySign({ secret: 'my-secret-key' });
 
@@ -180,24 +181,26 @@ node test/cross-check.mjs 2000 --seed=42   # 固定种子复现失败
 ## 目录结构
 
 ```
-query-sign/
+query-sign/                     monorepo → github.com/ajaxjs/query-sign
 ├── docs/
 │   └── SPEC.md                 跨语言签名规范（一致性的唯一依据）
-├── nodejs/                     → npm 包 query-sign
+├── nodejs/                     → npm 包 query-sign-node
+│   │                             subtree split 到 ajaxjs/query-sign-node
 │   ├── src/query-sign.ts       TypeScript 实现（单文件、零相对导入）
 │   ├── test/                   node:test 单测 + fixtures 遍历
 │   ├── scripts/                构建脚本（CJS/ESM 双产物 + 产物自检）
 │   ├── package.json            files 字段限定只发布 dist / README / LICENSE
-│   ├── LICENSE                 根 LICENSE 的副本（npm 只打包本子目录）
+│   ├── LICENSE                 根 LICENSE 的副本（发布产物只含本子目录）
 │   └── README.md               npm 详情页展示这份
-├── php/                        → Composer 包 your-vendor/query-sign
+├── php/                        → Composer 包 ajaxjs/query-sign-php
+│   │                             subtree split 到 ajaxjs/query-sign-php
 │   ├── src/QuerySign.php       PHP 实现
 │   ├── src/Exception/          异常体系（含标记接口）
 │   ├── tests/                  零依赖自建测试框架 + fixtures 遍历
 │   ├── scripts/lint.php        语法检查 + composer validate
 │   ├── composer.json           PSR-4，命名空间 QuerySign\
 │   ├── .gitattributes          export-ignore，避免 dist zip 带上 tests/ 与 scripts/
-│   ├── LICENSE                 根 LICENSE 的副本（subtree split 后本目录成为仓库根）
+│   ├── LICENSE                 根 LICENSE 的副本（split 后本目录成为仓库根）
 │   └── README.md               Packagist 详情页展示这份
 ├── test/                       跨语言共享资产（不属于任何一端）
 │   ├── fixtures.json           38 例黄金用例
@@ -269,25 +272,39 @@ node scripts/release.mjs --publish --tag --push
 两个平台的发布模型根本不同，脚本分别处理：
 
 - **npm** —— `npm publish` 直接上传 `nodejs/` 的 tarball
-- **Packagist** —— **没有上传命令**，包由 git tag 驱动。脚本负责校验元数据、打 tag、推送，
-  并在配置了 API Token 时触发 Packagist 立即更新
+- **Packagist** —— **没有上传命令**，包由 git 仓库 + tag 驱动。脚本负责校验元数据、
+  拆分仓库、打 tag、推送，并在配置了 API Token 时自动建包 / 触发更新
 
-### Packagist 需要 subtree split
+### 两个独立仓库由 subtree split 生成
 
-packagist.org 要求 `composer.json` 位于**仓库根目录**，而本仓库按语言隔离把它放在 `php/` 下。
-因此需要一个独立仓库承载 PHP 包，用 `--split` 自动生成并推送：
+packagist.org 要求 `composer.json` 位于**仓库根目录**，npm 包也希望仓库根即包根，
+而本仓库按语言隔离把它们放在 `nodejs/` 与 `php/` 下。因此两个独立仓库都由
+`git subtree split` 从本仓库生成，各自保留子目录的完整提交历史：
 
 ```bash
-node scripts/release.mjs --publish --split \
-  --php-remote=git@github.com:OWNER/query-sign-php.git --push
+node scripts/release.mjs --publish --split --push \
+  --node-remote=https://github.com/ajaxjs/query-sign-node.git \
+  --php-remote=https://github.com/ajaxjs/query-sign-php.git
 ```
 
-`--split` 执行 `git subtree split --prefix=php`，把 `php/` 拆成 `composer.json`
-位于根目录的独立历史，并打上 `php-vX.Y.Z` tag（推送时映射为 `vX.Y.Z`）。
+`--split` 对两端分别执行 `git subtree split --prefix=nodejs` / `--prefix=php`，
+产出 `package.json`（或 `composer.json`）位于根目录的独立历史，并打上
+`node-vX.Y.Z` / `php-vX.Y.Z` tag，推送时映射为独立仓库上的 `vX.Y.Z`。
 
-首次发布还需手动到 <https://packagist.org/packages/submit> 提交仓库地址。
-配置 `PACKAGIST_USERNAME` / `PACKAGIST_API_TOKEN` / `PHP_PACKAGE_REMOTE` 后，
-后续版本可全自动。
+只拆一端也可以，配合 `--only` 使用：`--only=npm --split` 或 `--only=packagist --split`。
+
+Packagist 首次建包需要账号凭证。配置以下环境变量后即可全自动；未配置时脚本会跳过
+并提示手动到 <https://packagist.org/packages/submit> 提交仓库地址：
+
+| 环境变量 | 用途 |
+| --- | --- |
+| `PACKAGIST_USERNAME` | Packagist 用户名 |
+| `PACKAGIST_API_TOKEN` | Packagist API Token（账号设置页生成） |
+| `NODE_PACKAGE_REMOTE` | 等价于 `--node-remote` |
+| `PHP_PACKAGE_REMOTE` | 等价于 `--php-remote` |
+
+脚本先尝试 `create-package` 建包，若包已存在则回落到 `update-package` 触发更新，
+因此同一条命令对首发和后续版本都适用。
 
 ### 预检会拦住什么
 
@@ -298,21 +315,28 @@ node scripts/release.mjs --publish --split \
 - README / SPEC 缺失
 - 不是 git 仓库，或工作区有未提交改动（可用 `--force` 忽略）
 - 未登录 npm，或 npm 上已存在同版本号
+- 加了 `--split` 却没给出对应端的 remote
 
 ---
 
-## 发布前必须替换的占位符
-
-当前仓库保留了占位符，**直接发布会产出坏链和错误的包名**。
-预检阶段会逐处报出位置（含行号），全部替换后即可通过。
+## 包名与仓库映射
 
 <!-- placeholder-doc-start -->
-| 占位符 | 出现位置 | 应替换为 |
-| --- | --- | --- |
-| `OWNER` | `nodejs/package.json`（repository / bugs / homepage）、`php/composer.json`（support）、三个 README 的文档链接 | 你的 GitHub 用户名或组织名 |
-| `your-vendor` | `php/composer.json` 的 `name`、三个 README（包名与徽章） | 你的 Packagist vendor 名 |
+| 位置 | 值 |
+| --- | --- |
+| monorepo | `ajaxjs/query-sign`（本仓库，根 `package.json` 为 private，不发布） |
+| npm 包名 | `query-sign-node` |
+| Node 独立仓库 | `ajaxjs/query-sign-node` |
+| Composer 包名 | `ajaxjs/query-sign-php` |
+| PHP 独立仓库 | `ajaxjs/query-sign-php` |
 
-快速定位：
+`query-sign` 仍作为**规范与产品族名**保留在两个地方，不要跟着包名一起改：
+
+- 源码抛错消息的统一前缀 `query-sign:` —— 两端必须逐字节一致，属于跨语言契约
+- `test/fixtures.json` 的 `referenceImplementation` 字段
+
+预检会扫描包清单与文档里的旧占位符（`OWNER` / `your-vendor` / `YOUR_VENDOR` /
+`your-scope`），命中即拒绝发布。快速核对：
 
 ```bash
 grep -rn "OWNER\|your-vendor" --include="*.json" --include="*.md" .
@@ -323,7 +347,8 @@ grep -rn "OWNER\|your-vendor" --include="*.json" --include="*.md" .
 发布脚本的占位符扫描会跳过它。原因很直接：本节必须**指名道姓**地写出这些 token，
 否则替换完成之后它会永远误报。标记是 HTML 注释，Markdown 渲染后不可见。
 
-另外，`nodejs/package.json` 的 `author` 目前为空（不影响发布，但会显示在 npm 页面上）。
+标记必须**独占一行**才生效，内联提及不会开启豁免——否则解释标记用法的这句话自己
+就会把豁免打开且再也关不上，导致文件后半部分的真实占位符全部漏检。
 
 ---
 

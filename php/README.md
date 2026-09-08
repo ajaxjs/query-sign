@@ -1,21 +1,19 @@
-# query-sign (PHP)
+# query-sign-php
 
 跨语言一致的请求数据签名（HMAC）库 —— PHP 实现。
 
-同一份数据、同一个密钥，本包与 [npm 版本 `query-sign`](https://www.npmjs.com/package/query-sign)
+同一份数据、同一个密钥，本包与 [npm 版本 `query-sign-node`](https://www.npmjs.com/package/query-sign-node)
 产出的签名**逐字节相同**，因此可以放心用于「一端签名、另一端验签」的场景。
 
-> 徽章在首次发布到 Packagist 后才会显示正常状态。
-
-[![Packagist Version](https://img.shields.io/packagist/v/your-vendor/query-sign.svg)](https://packagist.org/packages/your-vendor/query-sign)
-[![License](https://img.shields.io/packagist/l/your-vendor/query-sign.svg)](./LICENSE)
-[![PHP Version Require](https://poser.pugx.org/your-vendor/query-sign/require/php)](https://packagist.org/packages/your-vendor/query-sign)
+[![Packagist Version](https://img.shields.io/packagist/v/ajaxjs/query-sign-php.svg)](https://packagist.org/packages/ajaxjs/query-sign-php)
+[![License](https://img.shields.io/packagist/l/ajaxjs/query-sign-php.svg)](./LICENSE)
+[![PHP Version Require](https://poser.pugx.org/ajaxjs/query-sign-php/require/php)](https://packagist.org/packages/ajaxjs/query-sign-php)
 
 ---
 
 ## 特性
 
-- **跨语言一致**：与 Node.js 实现共享同一份规范（[SPEC.md](https://github.com/OWNER/query-sign/blob/main/docs/SPEC.md)）和黄金用例集，
+- **跨语言一致**：与 Node.js 实现共享同一份规范（[SPEC.md](https://github.com/ajaxjs/query-sign/blob/main/docs/SPEC.md)）和黄金用例集，
   另有随机模糊交叉验证逐字节比对
 - **零依赖**：只用 `hash_hmac` / `rawurlencode` 等标准函数，仅要求 `ext-hash`、`ext-json`
 - **PSR-4 自动加载**，命名空间 `QuerySign\`
@@ -31,7 +29,7 @@
 ## 安装
 
 ```bash
-composer require your-vendor/query-sign
+composer require ajaxjs/query-sign-php
 ```
 
 要求 PHP ^7.4 || ^8.0。
@@ -44,7 +42,7 @@ spl_autoload_register(static function (string $class): void {
     if (strncmp($class, $prefix, strlen($prefix)) !== 0) {
         return;
     }
-    $file = __DIR__ . '/vendor/your-vendor/query-sign/src/'
+    $file = __DIR__ . '/vendor/ajaxjs/query-sign-php/src/'
         . str_replace('\\', '/', substr($class, strlen($prefix))) . '.php';
     if (is_file($file)) {
         require $file;
@@ -203,7 +201,7 @@ try {
 
 ## 签名算法
 
-完整规范见 [SPEC.md](https://github.com/OWNER/query-sign/blob/main/docs/SPEC.md)，摘要如下：
+完整规范见 [SPEC.md](https://github.com/ajaxjs/query-sign/blob/main/docs/SPEC.md)，摘要如下：
 
 1. **剔除签名字段** —— 只剔除**顶层**键名严格等于 `signField` 的字段，嵌套层级中的同名字段照常参与
 2. **扁平化** —— `['a' => ['b' => [1]]]` → `a[b][0] = 1`；`null` 的键被整体丢弃；空数组不产生任何键
@@ -344,8 +342,10 @@ json_encode($qs->sign());
 
 ## 开发
 
+本仓库即包根目录（由 monorepo [`ajaxjs/query-sign`](https://github.com/ajaxjs/query-sign)
+通过 `git subtree split` 拆分发布）：
+
 ```bash
-cd php
 composer install
 composer run lint     # 语法检查全部源文件 + composer validate --strict
 composer run test     # 跑全部单测与跨语言 fixtures
@@ -362,9 +362,14 @@ php tests/run.php
 
 同样可以完整校验。
 
-跨语言一致性校验在仓库根目录：
+> `tests/` 与 `scripts/` 在 `.gitattributes` 里标记了 `export-ignore`，因此
+> `composer require` 安装的产物不含它们；但 `git clone` 本仓库能拿到完整内容，开发不受影响。
+
+跨语言一致性校验需要同时具备 Node 与 PHP 环境，只在 monorepo 根目录提供：
 
 ```bash
+git clone https://github.com/ajaxjs/query-sign.git
+cd query-sign
 npm run verify        # 两端构建 + 测试 + 跨语言模糊交叉验证
 npm run cross-check   # 只跑模糊交叉验证
 ```

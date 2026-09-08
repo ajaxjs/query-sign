@@ -10,10 +10,16 @@
  *   node scripts/release.mjs --bump=patch      先升版本号再走完整流程
  *   node scripts/release.mjs --publish --tag --push
  *
- * 两个平台的发布模型不同，脚本分别处理：
- *   - npm       : `npm publish` 直接上传 tarball
- *   - Packagist : 没有上传命令，包由 git tag 驱动。脚本负责校验元数据、
- *                 打 tag、推送，并在配置了 API Token 时触发 Packagist 立即更新
+ * 完整发布（含两端独立仓库拆分）:
+ *   node scripts/release.mjs --publish --tag --push --split \
+ *     --node-remote=https://github.com/ajaxjs/query-sign-node.git \
+ *     --php-remote=https://github.com/ajaxjs/query-sign-php.git
+ *
+ * 两个平台的发布模型根本不同，脚本分别处理：
+ *   - npm       : `npm publish` 直接上传 tarball，不依赖独立仓库
+ *   - Packagist : 没有上传命令，包由 git 仓库 + tag 驱动，且要求 composer.json
+ *                 位于**仓库根目录**。因此 PHP 端必须有独立仓库，由 --split 生成；
+ *                 配置了 API Token 时脚本自动建包，包已存在则改为触发更新
  *
  * 退出码：0 成功，1 校验/发布失败，2 参数错误。
  */
@@ -75,7 +81,11 @@ let args;
 try {
   args = parseArgs(process.argv.slice(2), {
     flags: ['publish', 'dry-run', 'tag', 'push', 'no-input', 'no-fuzz', 'skip-verify', 'help', 'force', 'split'],
-    options: ['bump', 'only', 'php', 'fuzz', 'message', 'split-branch', 'php-remote', 'php-branch'],
+    options: [
+      'bump', 'only', 'php', 'fuzz', 'message',
+      // subtree split：两端各自一个独立仓库，分支名与远端分别指定
+      'split-branch', 'node-remote', 'node-branch', 'php-remote', 'php-branch',
+    ],
     aliases: { h: 'help', n: 'no-input' },
   });
 } catch (err) {
@@ -97,6 +107,42 @@ if (!['all', 'npm', 'packagist'].includes(only)) {
 
 const willPublishNpm = args.publish && only !== 'packagist';
 const willPublishPhp = args.publish && only !== 'npm';
+
+/**
+ * subtree split 的两个目标。
+ *
+ * 两端都需要独立仓库：Packagist 硬性要求 composer.json 位于**仓库根目录**；
+ * npm 包也希望仓库根即包根，否则要靠 repository.directory 多绕一层。
+ * monorepo 始终是唯一事实来源，独立仓库由 split 派生，可随时重建。
+ *
+ * splitBranch 是 monorepo 内承载拆分结果的临时分支，两端**必须不同名**，
+ * 否则后跑的会覆盖先跑的；tagPrefix 同理，用于避开主仓库的 vX.Y.Z。
+ */
+const SPLIT_TARGETS = [
+  {
+    id: 'npm',
+    label: 'Node.js',
+    prefix: 'nodejs',
+    splitBranch: 'release/node',
+    tagPrefix: 'node-v',
+    remoteOption: 'node-remote',
+    remoteEnv: 'NODE_PACKAGE_REMOTE',
+    targetBranch: () => args['node-branch'] || 'main',
+    applies: () => willPublishNpm,
+  },
+  {
+    id: 'packagist',
+    label: 'PHP',
+    prefix: 'php',
+    // --split-branch 沿用既有语义，只作用于 PHP 端
+    splitBranch: args['split-branch'] || 'packagist',
+    tagPrefix: 'php-v',
+    remoteOption: 'php-remote',
+    remoteEnv: 'PHP_PACKAGE_REMOTE',
+    targetBranch: () => args['php-branch'] || 'main',
+    applies: () => willPublishPhp,
+  },
+];
 
 /* ------------------------------------------------------------------ *
  * 1. 读取清单
@@ -240,6 +286,22 @@ if (DOC_FILES.every((relative) => existsSync(resolve(ROOT, relative)))) {
   log.ok(`文档齐备（${DOC_FILES.join(' / ')}）`);
 }
 
+// 2.7 subtree split 的远端地址。
+// 只在「既要拆分又要推送」时才是必需的：只拆分不推送是合法用法
+// （先在本地生成分支检查产物），所以不能无条件要求远端存在。
+if (args.split && args.push) {
+  const missing = SPLIT_TARGETS.filter((target) => target.applies() && !splitRemote(target));
+  for (const target of missing) {
+    problems.push(
+      `--split --push 需要为 ${target.label} 端指定远端：` +
+      `--${target.remoteOption}=URL（或环境变量 ${target.remoteEnv}）`
+    );
+  }
+  if (missing.length === 0) {
+    log.ok('subtree split 远端已配置');
+  }
+}
+
 for (const warning of warnings) log.warn(warning);
 for (const problem of problems) log.fail(problem);
 
@@ -312,7 +374,9 @@ banner('5/6 发布');
 if (!args.publish) {
   log.info(args['dry-run'] ? '未加 --publish，仅预览' : '未加 --publish，不执行任何发布动作');
 
-  if (args['dry-run'] && willPublishNpm) {
+  // 注意这里不能用 willPublishNpm：它要求 args.publish 为真，
+  // 而 --dry-run 的语义恰恰是「不加 --publish 也要能预览」
+  if (args['dry-run'] && only !== 'packagist') {
     log.step('npm publish --dry-run（预览将要上传的文件）');
     // --ignore-scripts: 第 4 步已完整跑过 check，无需让 prepublishOnly 再构建一次
     runNpm(
@@ -323,10 +387,12 @@ if (!args.publish) {
 
   log.plain('');
   log.plain('下一步（确认无误后执行）：');
-  log.plain('    node scripts/release.mjs --publish --tag --push');
+  log.plain('    node scripts/release.mjs --publish --tag --push --split \\');
+  log.plain('      --node-remote=https://github.com/ajaxjs/query-sign-node.git \\');
+  log.plain('      --php-remote=https://github.com/ajaxjs/query-sign-php.git');
   log.plain('');
-  log.plain('Packagist 首次发布还需手动在 https://packagist.org/packages/submit');
-  log.plain('提交仓库地址；之后的新版本由 git tag 自动触发。');
+  log.plain('Packagist 首次建包需要账号凭证：配置 PACKAGIST_USERNAME / PACKAGIST_API_TOKEN');
+  log.plain('后脚本会自动建包；未配置时需手动到 https://packagist.org/packages/submit 提交。');
   process.exit(0);
 }
 
@@ -340,7 +406,11 @@ const summary = [
   willPublishPhp ? `Packagist ${composerManifest.name} (tag v${releaseVersion})` : null,
   args.tag ? `创建 git tag v${releaseVersion}` : null,
   args.push ? '推送 commits 与 tags 到 origin' : null,
-  args.split && willPublishPhp ? `subtree split php/ -> 分支 ${args['split-branch'] || 'packagist'}` : null,
+  ...SPLIT_TARGETS.filter((target) => args.split && target.applies()).map((target) => {
+    const remote = splitRemote(target);
+    const dest = remote ? normalizeRepoUrl(remote) : '仅生成到本地（未提供 remote）';
+    return `subtree split ${target.prefix}/ -> ${dest}`;
+  }),
 ].filter(Boolean);
 
 log.plain('即将执行：');
@@ -400,51 +470,18 @@ if (args.push && gitInfo.isRepo) {
   log.ok('推送完成');
 }
 
-// 5.5 subtree split：把 php/ 拆成一个 composer.json 位于根目录的独立历史
-if (args.split && willPublishPhp) {
-  log.step('为 PHP 包生成 subtree split');
-
+// 5.5 subtree split：把每个语言子目录拆成「包清单位于仓库根目录」的独立历史
+if (args.split) {
   if (!gitInfo.isRepo) {
     throw new ReleaseError('--split 需要当前目录是 git 仓库');
   }
 
-  const splitBranch = args['split-branch'] || 'packagist';
-  const phpBranch = args['php-branch'] || 'main';
-  // split 分支上的 tag 用 php- 前缀，避免与主仓库的 vX.Y.Z 冲突；
-  // 推送到 PHP 独立仓库时再映射回 vX.Y.Z
-  const splitTag = `php-v${releaseVersion}`;
-
-  log.info(
-    'Packagist 要求 composer.json 位于仓库根目录，因此需要把 php/ 拆成独立历史'
-  );
-
-  // 分支已存在时 subtree split 会拒绝创建，先删掉旧的（它只是派生产物，可随时重建）
-  if (gitInfo.branches.includes(splitBranch)) {
-    run('git', ['branch', '-D', splitBranch], { cwd: ROOT });
-    log.info(`已删除旧的 split 分支 ${splitBranch}`);
+  const targets = SPLIT_TARGETS.filter((target) => target.applies());
+  if (targets.length === 0) {
+    log.info('--split 无适用目标（受 --only 限制），跳过');
   }
-
-  run('git', ['subtree', 'split', '--prefix=php', `--branch=${splitBranch}`], { cwd: ROOT });
-  log.ok(`已生成 ${splitBranch}（php/ 的独立历史，composer.json 在根目录）`);
-
-  // 删除同名旧 tag 后重新打，指向 split 分支的 tip
-  if (capture('git', ['rev-parse', '-q', '--verify', `refs/tags/${splitTag}`], { cwd: ROOT }).ok) {
-    run('git', ['tag', '-d', splitTag], { cwd: ROOT });
-  }
-  run('git', ['tag', splitTag, splitBranch], { cwd: ROOT });
-  log.ok(`已在 split 历史上打 tag ${splitTag}`);
-
-  const phpRemote = args['php-remote'] || process.env.PHP_PACKAGE_REMOTE;
-  if (phpRemote && args.push) {
-    log.step(`推送 PHP 包到独立仓库 ${phpRemote}`);
-    run('git', ['push', phpRemote, `${splitBranch}:${phpBranch}`], { cwd: ROOT });
-    run('git', ['push', phpRemote, `refs/tags/${splitTag}:refs/tags/v${releaseVersion}`], { cwd: ROOT });
-    log.ok(`已推送 ${phpBranch} 分支与 v${releaseVersion} tag`);
-  } else if (args.split) {
-    log.warn('未提供 --php-remote=URL（或环境变量 PHP_PACKAGE_REMOTE），跳过推送');
-    log.plain('    split 分支与 tag 已生成在本地，可手动推送：');
-    log.plain(`      git push <php-repo-url> ${splitBranch}:${phpBranch}`);
-    log.plain(`      git push <php-repo-url> refs/tags/${splitTag}:refs/tags/v${releaseVersion}`);
+  for (const target of targets) {
+    runSubtreeSplit(target);
   }
 }
 
@@ -455,24 +492,32 @@ if (willPublishPhp) {
 
   const username = process.env.PACKAGIST_USERNAME;
   const token = process.env.PACKAGIST_API_TOKEN;
+  // Packagist 上登记的是拆分出来的独立仓库，不是本 monorepo
+  const phpTarget = SPLIT_TARGETS.find((target) => target.id === 'packagist');
+  const repo = packageRepo(phpTarget);
 
   if (!username || !token) {
-    log.warn('未配置 PACKAGIST_USERNAME / PACKAGIST_API_TOKEN，跳过主动刷新');
-    log.plain('    首次发布请手动提交: https://packagist.org/packages/submit');
+    log.warn('未配置 PACKAGIST_USERNAME / PACKAGIST_API_TOKEN，跳过建包与刷新');
+    log.plain('    首次发布请手动提交以下仓库地址：');
+    log.plain(`      https://packagist.org/packages/submit`);
+    log.plain(`      ${repo}`);
     log.plain('    之后若仓库已配置 GitHub Webhook，push tag 后会自动更新');
   } else {
-    // Packagist 上登记的是 PHP 包的仓库（通常是 subtree split 出来的独立仓库），
-    // 不是本 monorepo；因此优先用 --php-remote
-    const packagistRepo = phpPackageRepo();
-    const url =
-      `https://packagist.org/api/update-package?username=${encodeURIComponent(username)}` +
-      `&apiToken=${encodeURIComponent(token)}&url=${encodeURIComponent(packagistRepo)}`;
-    const result = await fetchJson(url);
-    if (result.ok) {
-      log.ok(`已触发 Packagist 更新（${packagistRepo}）`);
+    // 先建包再回落更新：首次发布时包还不存在，update-package 会失败；
+    // 包已存在时 create-package 会失败，此时才轮到 update-package。
+    // 这个顺序让同一条命令对首发和后续版本都适用。
+    const created = await callPackagist('create-package', username, token, { repository: repo });
+    if (created.ok) {
+      log.ok(`已在 Packagist 创建包（${repo}）`);
     } else {
-      log.warn(`触发 Packagist 更新失败（${result.status}）: ${result.body.slice(0, 200)}`);
-      log.plain('    可登录 packagist.org 手动点击 Update');
+      log.info(`create-package 返回 ${created.status}，按「包已存在」处理，改为触发更新`);
+      const updated = await callPackagist('update-package', username, token, { url: repo });
+      if (updated.ok) {
+        log.ok(`已触发 Packagist 更新（${repo}）`);
+      } else {
+        log.warn(`触发 Packagist 更新失败（${updated.status}）: ${updated.body.slice(0, 200)}`);
+        log.plain('    可登录 packagist.org 手动点击 Update');
+      }
     }
   }
 }
@@ -508,8 +553,16 @@ function printHelp() {
   --bump=LEVEL      升版本: patch / minor / major / prepatch / preminor / premajor
                     或直接给出目标版本号（如 --bump=1.2.0）
   --tag             创建带注释的 git tag vX.Y.Z（版本取自 nodejs/package.json）
-  --push            推送当前分支与 tag 到 origin
+  --push            推送当前分支与 tag 到 origin；配合 --split 时也推送拆分结果
   --message=TEXT    自定义 tag 注释
+
+subtree split（两端各对应一个独立仓库）:
+  --split           把 nodejs/ 与 php/ 各自拆成「包清单位于仓库根目录」的独立历史
+  --node-remote=URL Node 端独立仓库地址（等价于环境变量 NODE_PACKAGE_REMOTE）
+  --php-remote=URL  PHP 端独立仓库地址（等价于环境变量 PHP_PACKAGE_REMOTE）
+  --node-branch=BR  推送到 Node 仓库的哪个分支（默认 main）
+  --php-branch=BR   推送到 PHP 仓库的哪个分支（默认 main）
+  --split-branch=BR PHP 端在 monorepo 内的临时分支名（默认 packagist）
 
 校验相关:
   --skip-verify     跳过构建/测试/跨语言校验（不建议）
@@ -518,23 +571,24 @@ function printHelp() {
   --php=BIN         指定 PHP 可执行文件
   -h, --help        显示本帮助
 
-Packagist 说明（重要）:
-  1) Composer 包没有"上传"这一步，Packagist 直接从 git 仓库读取。因此 PHP 侧
-     的发布 = 元数据校验 + 打 tag + 推送。首次发布需手动到
-     https://packagist.org/packages/submit 提交仓库地址。
+两个平台的发布模型根本不同:
+  1) npm 直接上传 tarball，在 nodejs/ 下执行 npm publish 即可，不依赖独立仓库。
 
-  2) packagist.org 要求 composer.json 位于**仓库根目录**，而本仓库把它放在 php/ 下。
-     因此需要一个独立仓库承载 PHP 包，用 --split 自动生成并推送：
+  2) Composer 包没有"上传"这一步，Packagist 直接从 git 仓库读取，且要求
+     composer.json 位于**仓库根目录**——而本仓库按语言隔离把它放在 php/ 下。
+     因此 PHP 端必须有一个独立仓库，由 --split 自动生成并推送：
 
-       node scripts/release.mjs --publish --split \\
-         --php-remote=git@github.com:OWNER/query-sign-php.git --push
+       node scripts/release.mjs --publish --split --push \\
+         --node-remote=https://github.com/ajaxjs/query-sign-node.git \\
+         --php-remote=https://github.com/ajaxjs/query-sign-php.git
 
-     --split 会执行 git subtree split --prefix=php，把 php/ 拆成 composer.json
-     位于根目录的独立历史，并打上 php-vX.Y.Z tag（推送时映射为 vX.Y.Z）。
+     --split 对两端分别执行 git subtree split --prefix=nodejs / --prefix=php，
+     并打上 node-vX.Y.Z / php-vX.Y.Z tag（推送时映射为独立仓库的 vX.Y.Z）。
 
-  配置以下环境变量后，脚本会在推送 tag 后主动调用 Packagist API 触发更新：
+  配置以下环境变量后，脚本会调用 Packagist API 自动建包；若包已存在则改为触发更新，
+  因此同一条命令对首发和后续版本都适用：
     PACKAGIST_USERNAME, PACKAGIST_API_TOKEN
-    PHP_PACKAGE_REMOTE（等价于 --php-remote）`);
+  未配置时需手动到 https://packagist.org/packages/submit 提交仓库地址。`);
 }
 
 /**
@@ -633,23 +687,111 @@ function inspectGit() {
   return info;
 }
 
+/** 去掉 git+ 前缀与 .git 后缀，得到平台登记用的 https 仓库地址 */
+function normalizeRepoUrl(url) {
+  return String(url).replace(/^git\+/, '').replace(/\.git$/, '');
+}
+
 function repositoryUrl() {
-  const url = npmManifest.repository?.url || '';
-  return url.replace(/^git\+/, '').replace(/\.git$/, '');
+  return normalizeRepoUrl(npmManifest.repository?.url || '');
 }
 
-/** PHP 包在 Packagist 上登记的仓库地址 */
-function phpPackageRepo() {
-  const remote = args['php-remote'] || process.env.PHP_PACKAGE_REMOTE;
-  if (remote) return String(remote).replace(/^git\+/, '').replace(/\.git$/, '');
-  return repositoryUrl();
+/** 某端 split 的远端地址：命令行参数优先，其次环境变量 */
+function splitRemote(target) {
+  return args[target.remoteOption] || process.env[target.remoteEnv] || '';
 }
 
-async function fetchJson(url) {
+/**
+ * 某端包在平台上登记的仓库地址。
+ *
+ * 优先取 split 远端：平台上登记的是拆分出来的**独立仓库**，不是本 monorepo。
+ * 未提供远端时回落到 npm 的 repository 字段，至少给出一个可用地址。
+ */
+function packageRepo(target) {
+  const remote = splitRemote(target);
+  return remote ? normalizeRepoUrl(remote) : repositoryUrl();
+}
+
+/**
+ * 把 target.prefix/ 拆成独立历史，打 tag，并按需推送到该端的独立仓库。
+ *
+ * 拆分结果是**派生产物**：旧的 split 分支与 tag 一律删除重建，
+ * 不做增量合并。因此不要手工修改 split 分支——下次发布会被覆盖。
+ *
+ * 三种收尾状态需要区分清楚，否则会误报原因：
+ *   - 未给 remote          -> 本地已生成，提示手工推送命令
+ *   - 给了 remote 但没 --push -> 本地已生成，明确说明是 --push 缺失
+ *   - 两者都有             -> 推送分支与 tag
+ */
+function runSubtreeSplit(target) {
+  const { prefix, label, splitBranch, tagPrefix } = target;
+  const targetBranch = target.targetBranch();
+  // split 分支上的 tag 带语言前缀，避免与主仓库的 vX.Y.Z 冲突；
+  // 推送到独立仓库时再映射回 vX.Y.Z
+  const splitTag = `${tagPrefix}${releaseVersion}`;
+
+  log.step(`为 ${label} 包生成 subtree split（${prefix}/）`);
+
+  // 分支已存在时 subtree split 会拒绝创建，先删掉旧的
+  if (gitInfo.branches.includes(splitBranch)) {
+    run('git', ['branch', '-D', splitBranch], { cwd: ROOT });
+    log.info(`已删除旧的 split 分支 ${splitBranch}`);
+  }
+
+  run('git', ['subtree', 'split', `--prefix=${prefix}`, `--branch=${splitBranch}`], { cwd: ROOT });
+  log.ok(`已生成 ${splitBranch}（${prefix}/ 的独立历史，包清单在根目录）`);
+
+  if (capture('git', ['rev-parse', '-q', '--verify', `refs/tags/${splitTag}`], { cwd: ROOT }).ok) {
+    run('git', ['tag', '-d', splitTag], { cwd: ROOT });
+  }
+  run('git', ['tag', splitTag, splitBranch], { cwd: ROOT });
+  log.ok(`已在 split 历史上打 tag ${splitTag}`);
+
+  const remote = splitRemote(target);
+  if (!remote) {
+    log.warn(`未提供 --${target.remoteOption}=URL（或环境变量 ${target.remoteEnv}），跳过推送`);
+    log.plain('    split 分支与 tag 已生成在本地，可手动推送：');
+    log.plain(`      git push <${target.id}-repo-url> ${splitBranch}:${targetBranch}`);
+    log.plain(`      git push <${target.id}-repo-url> refs/tags/${splitTag}:refs/tags/v${releaseVersion}`);
+    return;
+  }
+
+  if (!args.push) {
+    log.info(`未加 --push，${label} split 结果保留在本地（${splitBranch} / ${splitTag}）`);
+    return;
+  }
+
+  log.step(`推送 ${label} 包到独立仓库 ${remote}`);
+  // 先分支后 tag：空仓库需要分支先存在，tag 才能落上去
+  run('git', ['push', remote, `${splitBranch}:${targetBranch}`], { cwd: ROOT });
+  run('git', ['push', remote, `refs/tags/${splitTag}:refs/tags/v${releaseVersion}`], { cwd: ROOT });
+  log.ok(`已推送 ${targetBranch} 分支与 v${releaseVersion} tag`);
+}
+
+/**
+ * 调用 Packagist API。
+ *
+ * 两个容易踩错的点：
+ *
+ * 1. 业务参数必须放在 **JSON body** 里——`create-package` 读 body 的 `repository`，
+ *    `update-package` 读 body 的 `url`。拼到 query string 上不会被识别。
+ * 2. 认证用 HTTP Basic，不把 apiToken 拼进 URL。URL 会随 fetch 的错误消息、
+ *    代理日志一起外泄，而 Authorization 头只存在于本次请求中。
+ */
+async function callPackagist(endpoint, username, token, payload) {
+  const auth = Buffer.from(`${username}:${token}`).toString('base64');
   try {
-    const response = await fetch(url, { method: 'POST' });
+    const response = await fetch(`https://packagist.org/api/${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Basic ${auth}`,
+      },
+      body: JSON.stringify(payload),
+    });
     return { ok: response.ok, status: response.status, body: await response.text() };
   } catch (err) {
+    // 网络故障与 HTTP 错误统一成 status 0，调用方只需看 ok 与 status
     return { ok: false, status: 0, body: err.message };
   }
 }

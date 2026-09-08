@@ -1,21 +1,19 @@
-# query-sign
+# query-sign-node
 
 跨语言一致的请求数据签名（HMAC）库 —— Node.js / TypeScript 实现。
 
-同一份数据、同一个密钥，本包与 [PHP 版本](https://packagist.org/packages/your-vendor/query-sign)
+同一份数据、同一个密钥，本包与 [PHP 版本 `ajaxjs/query-sign-php`](https://packagist.org/packages/ajaxjs/query-sign-php)
 产出的签名**逐字节相同**，因此可以放心用于「一端签名、另一端验签」的场景。
 
-> 徽章在首次发布到 npm 后才会显示正常状态。
-
-[![npm version](https://img.shields.io/npm/v/query-sign.svg)](https://www.npmjs.com/package/query-sign)
-[![license](https://img.shields.io/npm/l/query-sign.svg)](./LICENSE)
-[![node](https://img.shields.io/node/v/query-sign.svg)](https://nodejs.org)
+[![npm version](https://img.shields.io/npm/v/query-sign-node.svg)](https://www.npmjs.com/package/query-sign-node)
+[![license](https://img.shields.io/npm/l/query-sign-node.svg)](./LICENSE)
+[![node](https://img.shields.io/node/v/query-sign-node.svg)](https://nodejs.org)
 
 ---
 
 ## 特性
 
-- **跨语言一致**：与 PHP 实现共享同一份规范（[SPEC.md](https://github.com/OWNER/query-sign/blob/main/docs/SPEC.md)）和黄金用例集，
+- **跨语言一致**：与 PHP 实现共享同一份规范（[SPEC.md](https://github.com/ajaxjs/query-sign/blob/main/docs/SPEC.md)）和黄金用例集，
   另有随机模糊交叉验证逐字节比对
 - **TypeScript 编写**，自带类型声明；同时提供 CJS 与 ESM 双产物
 - **零运行时依赖**，只用 `node:crypto`
@@ -30,7 +28,7 @@
 ## 安装
 
 ```bash
-npm install query-sign
+npm install query-sign-node
 ```
 
 要求 Node.js >= 18。
@@ -40,8 +38,8 @@ npm install query-sign
 ## 快速开始
 
 ```js
-import { QuerySign } from 'query-sign';
-// CommonJS: const { QuerySign } = require('query-sign');
+import { QuerySign } from 'query-sign-node';
+// CommonJS: const { QuerySign } = require('query-sign-node');
 
 const qs = new QuerySign({ secret: 'my-secret-key' });
 
@@ -137,7 +135,7 @@ import {
   QuerySign,          // 主类（同时也是 default export）
   encodeRfc3986,      // RFC 3986 百分号编码工具
   SPEC_VERSION,       // 规范版本号，跨语言实现必须一致
-} from 'query-sign';
+} from 'query-sign-node';
 
 import type {
   QuerySignOptions,
@@ -149,14 +147,14 @@ import type {
   SignableScalar,
   SignAlgorithm,
   SignEncoding,
-} from 'query-sign';
+} from 'query-sign-node';
 ```
 
 ---
 
 ## 签名算法
 
-完整规范见 [SPEC.md](https://github.com/OWNER/query-sign/blob/main/docs/SPEC.md)，摘要如下：
+完整规范见 [SPEC.md](https://github.com/ajaxjs/query-sign/blob/main/docs/SPEC.md)，摘要如下：
 
 1. **剔除签名字段** —— 只剔除**顶层**键名严格等于 `signField` 的字段，嵌套层级中的同名字段照常参与
 2. **扁平化** —— `{ a: { b: [1] } }` → `a[b][0] = 1`；`null` / `undefined` 的键被整体丢弃；空对象/空数组不产生任何键
@@ -217,8 +215,10 @@ qs.toString();
 
 ## 开发
 
+本仓库即包根目录（由 monorepo [`ajaxjs/query-sign`](https://github.com/ajaxjs/query-sign)
+通过 `git subtree split` 拆分发布）：
+
 ```bash
-cd nodejs
 npm install
 npm run typecheck   # tsc --noEmit（strict，含测试文件）
 npm test            # node --test
@@ -227,9 +227,11 @@ npm run test:dist   # 用构建产物跑一遍跨语言 fixtures
 npm run check       # 以上全部
 ```
 
-跨语言一致性校验在仓库根目录：
+跨语言一致性校验需要同时具备 Node 与 PHP 环境，只在 monorepo 根目录提供：
 
 ```bash
+git clone https://github.com/ajaxjs/query-sign.git
+cd query-sign
 npm run verify        # 两端构建 + 测试 + 跨语言模糊交叉验证
 npm run cross-check   # 只跑模糊交叉验证
 ```

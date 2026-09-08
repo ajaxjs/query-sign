@@ -1,8 +1,13 @@
 {
-    "name": "your-vendor/query-sign",
-    "description": "跨语言一致的请求数据签名（HMAC）库。PHP 实现，与 npm 包 query-sign 产生完全相同的签名。",
+    "name": "ajaxjs/query-sign-php",
+    "description": "跨语言一致的请求数据签名（HMAC）库。PHP 实现，与 npm 包 query-sign-node 产生完全相同的签名。",
     "type": "library",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "ajaxjs"
+        }
+    ],
     "keywords": [
         "sign",
         "signature",
@@ -45,7 +50,7 @@
         }
     },
     "support": {
-        "issues": "https://github.com/OWNER/query-sign/issues",
-        "source": "https://github.com/OWNER/query-sign/tree/main/php"
+        "issues": "https://github.com/ajaxjs/query-sign-php/issues",
+        "source": "https://github.com/ajaxjs/query-sign-php/tree/main"
     }
 }
