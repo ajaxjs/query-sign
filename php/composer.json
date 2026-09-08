@@ -1,0 +1,51 @@
+{
+    "name": "your-vendor/query-sign",
+    "description": "跨语言一致的请求数据签名（HMAC）库。PHP 实现，与 npm 包 query-sign 产生完全相同的签名。",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "sign",
+        "signature",
+        "hmac",
+        "query-string",
+        "verify",
+        "cross-language",
+        "nodejs-compatible"
+    ],
+    "require": {
+        "php": "^7.4 || ^8.0",
+        "ext-hash": "*",
+        "ext-json": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "QuerySign\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "QuerySign\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "lint": "php scripts/lint.php",
+        "test": "php tests/run.php",
+        "check": [
+            "@lint",
+            "@test"
+        ]
+    },
+    "config": {
+        "sort-packages": true,
+        "optimize-autoloader": true
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.0.x-dev"
+        }
+    },
+    "support": {
+        "issues": "https://github.com/OWNER/query-sign/issues",
+        "source": "https://github.com/OWNER/query-sign/tree/main/php"
+    }
+}

@@ -1,0 +1,28 @@
+# ---- Node.js ----
+node_modules/
+npm-debug.log*
+yarn-error.log*
+*.tgz
+
+# 构建产物由 npm run build 生成，发布时经 prepublishOnly 现场构建，不入库
+nodejs/dist/
+
+# ---- PHP ----
+php/vendor/
+composer.phar
+
+# 库（library）不提交 composer.lock：它只反映开发机环境，
+# 会误导使用者以为本包锁定了依赖版本
+php/composer.lock
+
+# ---- 测试中间产物 ----
+test/.tmp/
+
+# ---- 编辑器 / 操作系统 ----
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini

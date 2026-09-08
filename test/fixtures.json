@@ -1,0 +1,736 @@
+{
+  "$comment": "由 test/generate-fixtures.mjs 生成，请勿手工编辑。所有语言实现必须逐字段匹配本文件。",
+  "specVersion": 1,
+  "referenceImplementation": "query-sign (nodejs) v1.0.0",
+  "cases": [
+    {
+      "name": "basic-flat-string-and-number",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "appId": "wx1234567890",
+        "ts": 1700000000,
+        "nonce": "a1b2c3"
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "appId=wx1234567890&nonce=a1b2c3&ts=1700000000",
+        "sign": "76d98cd9685cb8114c1c6c6fba78d940eab747e50c0b1197f1c3300f16ff8382",
+        "toString": "appId=wx1234567890&nonce=a1b2c3&ts=1700000000&sign=76d98cd9685cb8114c1c6c6fba78d940eab747e50c0b1197f1c3300f16ff8382"
+      }
+    },
+    {
+      "name": "insertion-order-a",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "a": 1,
+        "b": 2,
+        "c": 3
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "a=1&b=2&c=3",
+        "sign": "af17ed44f89eee81bae0e5642590f93e9504ecb137f9bae630edef20bd3d44bb",
+        "toString": "a=1&b=2&c=3&sign=af17ed44f89eee81bae0e5642590f93e9504ecb137f9bae630edef20bd3d44bb"
+      }
+    },
+    {
+      "name": "insertion-order-b-same-as-a",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "c": 3,
+        "b": 2,
+        "a": 1
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "a=1&b=2&c=3",
+        "sign": "af17ed44f89eee81bae0e5642590f93e9504ecb137f9bae630edef20bd3d44bb",
+        "toString": "a=1&b=2&c=3&sign=af17ed44f89eee81bae0e5642590f93e9504ecb137f9bae630edef20bd3d44bb"
+      }
+    },
+    {
+      "name": "sort-keys-by-utf8-bytes",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "0": "5",
+        "b": "1",
+        "A": "2",
+        "a": "3",
+        "B": "4",
+        "_": "6",
+        "~": "7",
+        "Z": "8",
+        "中": "9"
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "0=5&A=2&B=4&Z=8&_=6&a=3&b=1&~=7&%E4%B8%AD=9",
+        "sign": "a55565d7bdb2aee479e0b7e13688245458acb3ed439bcc436bc94595366b0bdc",
+        "toString": "0=5&A=2&B=4&Z=8&_=6&a=3&b=1&~=7&%E4%B8%AD=9&sign=a55565d7bdb2aee479e0b7e13688245458acb3ed439bcc436bc94595366b0bdc"
+      }
+    },
+    {
+      "name": "sort-utf8-vs-utf16-divergence",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "￿": "private-use",
+        "🙂": "emoji"
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "%EF%BF%BF=private-use&%F0%9F%99%82=emoji",
+        "sign": "4d262645b8b55f288e3f5224a7585beeb8449078e90a75b9b0ee1125b1fc8851",
+        "toString": "%EF%BF%BF=private-use&%F0%9F%99%82=emoji&sign=4d262645b8b55f288e3f5224a7585beeb8449078e90a75b9b0ee1125b1fc8851"
+      }
+    },
+    {
+      "name": "numeric-string-keys-sorted-lexically",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "1": "c",
+        "9": "b",
+        "10": "a",
+        "100": "d"
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "1=c&10=a&100=d&9=b",
+        "sign": "df5261ef46c681426df6778490b13b2be27d499b130a369ccf2372cfdad59bbf",
+        "toString": "1=c&10=a&100=d&9=b&sign=df5261ef46c681426df6778490b13b2be27d499b130a369ccf2372cfdad59bbf"
+      }
+    },
+    {
+      "name": "nested-object",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "user": {
+          "id": 7,
+          "name": "tom"
+        },
+        "verbose": true
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "user%5Bid%5D=7&user%5Bname%5D=tom&verbose=true",
+        "sign": "e95743b3e7efc7ae0cca48f185af7110edac4e66b93d50e2799267e9cd1d285a",
+        "toString": "user%5Bid%5D=7&user%5Bname%5D=tom&verbose=true&sign=e95743b3e7efc7ae0cca48f185af7110edac4e66b93d50e2799267e9cd1d285a"
+      }
+    },
+    {
+      "name": "nested-array",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "ids": [
+          10,
+          20,
+          30
+        ],
+        "tag": "x"
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "ids%5B0%5D=10&ids%5B1%5D=20&ids%5B2%5D=30&tag=x",
+        "sign": "4faf54eb4b94dba3fa36e6a9641b38b7d2fc55ba302bc57d5ef31823b2e21839",
+        "toString": "ids%5B0%5D=10&ids%5B1%5D=20&ids%5B2%5D=30&tag=x&sign=4faf54eb4b94dba3fa36e6a9641b38b7d2fc55ba302bc57d5ef31823b2e21839"
+      }
+    },
+    {
+      "name": "deep-mixed-nesting",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "order": {
+          "id": "ORD-1",
+          "items": [
+            {
+              "sku": "A",
+              "qty": 2,
+              "tags": [
+                "hot",
+                "new"
+              ]
+            },
+            {
+              "sku": "B",
+              "qty": 1,
+              "tags": []
+            }
+          ],
+          "coupon": {
+            "code": "SAVE10",
+            "stackable": false
+          }
+        }
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "order%5Bcoupon%5D%5Bcode%5D=SAVE10&order%5Bcoupon%5D%5Bstackable%5D=false&order%5Bid%5D=ORD-1&order%5Bitems%5D%5B0%5D%5Bqty%5D=2&order%5Bitems%5D%5B0%5D%5Bsku%5D=A&order%5Bitems%5D%5B0%5D%5Btags%5D%5B0%5D=hot&order%5Bitems%5D%5B0%5D%5Btags%5D%5B1%5D=new&order%5Bitems%5D%5B1%5D%5Bqty%5D=1&order%5Bitems%5D%5B1%5D%5Bsku%5D=B",
+        "sign": "62193a9fd50dfbd5ef0038f5b9f6eed55b0e526423757a8bf6cba33cab15eda8",
+        "toString": "order%5Bcoupon%5D%5Bcode%5D=SAVE10&order%5Bcoupon%5D%5Bstackable%5D=false&order%5Bid%5D=ORD-1&order%5Bitems%5D%5B0%5D%5Bqty%5D=2&order%5Bitems%5D%5B0%5D%5Bsku%5D=A&order%5Bitems%5D%5B0%5D%5Btags%5D%5B0%5D=hot&order%5Bitems%5D%5B0%5D%5Btags%5D%5B1%5D=new&order%5Bitems%5D%5B1%5D%5Bqty%5D=1&order%5Bitems%5D%5B1%5D%5Bsku%5D=B&sign=62193a9fd50dfbd5ef0038f5b9f6eed55b0e526423757a8bf6cba33cab15eda8"
+      }
+    },
+    {
+      "name": "null-dropped-empty-string-kept",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "keep": "",
+        "drop": null,
+        "also": "v"
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "also=v&keep=",
+        "sign": "672036600e2e24b47c4cae5800b13853d0b189aac204c33e72b65d752491dc03",
+        "toString": "also=v&keep=&sign=672036600e2e24b47c4cae5800b13853d0b189aac204c33e72b65d752491dc03"
+      }
+    },
+    {
+      "name": "boolean-normalized-to-true-false",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "t": true,
+        "f": false,
+        "n": 1,
+        "m": 0
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "f=false&m=0&n=1&t=true",
+        "sign": "d0b44ae24d6bd489a72cd8cc0abc78fdf4b2fcb0259046f872cdec22af2e3678",
+        "toString": "f=false&m=0&n=1&t=true&sign=d0b44ae24d6bd489a72cd8cc0abc78fdf4b2fcb0259046f872cdec22af2e3678"
+      }
+    },
+    {
+      "name": "empty-nested-containers-dropped",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "obj": {},
+        "arr": [],
+        "real": "yes",
+        "nested": {
+          "empty": {}
+        }
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "real=yes",
+        "sign": "8681882225644a45e821668198b8c7cf9efacf765536850323e885a793f0c9a5",
+        "toString": "real=yes&sign=8681882225644a45e821668198b8c7cf9efacf765536850323e885a793f0c9a5"
+      }
+    },
+    {
+      "name": "array-with-null-holes-keeps-index",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "a": [
+          10,
+          null,
+          20
+        ]
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "a%5B0%5D=10&a%5B2%5D=20",
+        "sign": "610a97d7b8a767afdf76a5d1f3cfe4f3ef77bf6724bce6a580276a0c09c814e5",
+        "toString": "a%5B0%5D=10&a%5B2%5D=20&sign=610a97d7b8a767afdf76a5d1f3cfe4f3ef77bf6724bce6a580276a0c09c814e5"
+      }
+    },
+    {
+      "name": "top-level-sign-field-excluded",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "a": 1,
+        "sign": "stale-signature-must-be-ignored"
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "a=1",
+        "sign": "f37e960a3267dc5b4c5ece5ea8e28b5138da6c57dfb355195f6aacdd4fb3480c",
+        "toString": "a=1&sign=f37e960a3267dc5b4c5ece5ea8e28b5138da6c57dfb355195f6aacdd4fb3480c"
+      }
+    },
+    {
+      "name": "nested-sign-field-not-excluded",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "a": 1,
+        "meta": {
+          "sign": "nested-participates"
+        }
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "a=1&meta%5Bsign%5D=nested-participates",
+        "sign": "3ecdecae8a984489cc27369894ce9b01df0cfcdb2f04255f2d6404d5a2f2aed5",
+        "toString": "a=1&meta%5Bsign%5D=nested-participates&sign=3ecdecae8a984489cc27369894ce9b01df0cfcdb2f04255f2d6404d5a2f2aed5"
+      }
+    },
+    {
+      "name": "custom-sign-field",
+      "options": {
+        "secret": "qs-secret-2024",
+        "signField": "signature"
+      },
+      "data": {
+        "a": 1,
+        "sign": "kept-because-not-signField",
+        "signature": "dropped"
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "a=1&sign=kept-because-not-signField",
+        "sign": "5226bece69fb5d460243c8412b1c01ddcb7e4f111cc564f517dc9676aece619e",
+        "toString": "a=1&sign=kept-because-not-signField&signature=5226bece69fb5d460243c8412b1c01ddcb7e4f111cc564f517dc9676aece619e"
+      }
+    },
+    {
+      "name": "empty-data",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {},
+      "throws": false,
+      "expect": {
+        "stringToSign": "",
+        "sign": "2a93c0ee1e4c641d78c99441ff7a2c4b59e0aaf1b2aa6775d49883d2665260e1",
+        "toString": "sign=2a93c0ee1e4c641d78c99441ff7a2c4b59e0aaf1b2aa6775d49883d2665260e1"
+      }
+    },
+    {
+      "name": "only-sign-field",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "sign": "whatever"
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "",
+        "sign": "2a93c0ee1e4c641d78c99441ff7a2c4b59e0aaf1b2aa6775d49883d2665260e1",
+        "toString": "sign=2a93c0ee1e4c641d78c99441ff7a2c4b59e0aaf1b2aa6775d49883d2665260e1"
+      }
+    },
+    {
+      "name": "rfc3986-special-chars",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "space": "a b",
+        "plus": "a+b",
+        "amp": "a&b",
+        "eq": "a=b",
+        "pct": "100%",
+        "tilde": "a~b",
+        "bang": "a!b",
+        "quote": "a'b",
+        "paren": "a(b)c",
+        "star": "a*b",
+        "slash": "a/b?c#d",
+        "bracket": "a[b]"
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "amp=a%26b&bang=a%21b&bracket=a%5Bb%5D&eq=a%3Db&paren=a%28b%29c&pct=100%25&plus=a%2Bb&quote=a%27b&slash=a%2Fb%3Fc%23d&space=a%20b&star=a%2Ab&tilde=a~b",
+        "sign": "6cc34ecdd80c04563deb42ecb3f1eb6c37a807345e8291a32276b4117117ad73",
+        "toString": "amp=a%26b&bang=a%21b&bracket=a%5Bb%5D&eq=a%3Db&paren=a%28b%29c&pct=100%25&plus=a%2Bb&quote=a%27b&slash=a%2Fb%3Fc%23d&space=a%20b&star=a%2Ab&tilde=a~b&sign=6cc34ecdd80c04563deb42ecb3f1eb6c37a807345e8291a32276b4117117ad73"
+      }
+    },
+    {
+      "name": "unicode-values-and-keys",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "名称": "张三",
+        "emoji": "🙂🚀",
+        "mixed": "abc中文123"
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "emoji=%F0%9F%99%82%F0%9F%9A%80&mixed=abc%E4%B8%AD%E6%96%87123&%E5%90%8D%E7%A7%B0=%E5%BC%A0%E4%B8%89",
+        "sign": "965f18b7ee62faafa02c30135e2d67535cc6f90fba61b637af4fbbacca83c78e",
+        "toString": "emoji=%F0%9F%99%82%F0%9F%9A%80&mixed=abc%E4%B8%AD%E6%96%87123&%E5%90%8D%E7%A7%B0=%E5%BC%A0%E4%B8%89&sign=965f18b7ee62faafa02c30135e2d67535cc6f90fba61b637af4fbbacca83c78e"
+      }
+    },
+    {
+      "name": "integer-values",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "zero": 0,
+        "neg": -5,
+        "max32": 2147483647,
+        "safeMax": 9007199254740991
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "max32=2147483647&neg=-5&safeMax=9007199254740991&zero=0",
+        "sign": "1f8fec7c38b1ea867ae0013bdeb5d917f1a55d8ffd8610bf16e8f08573de0915",
+        "toString": "max32=2147483647&neg=-5&safeMax=9007199254740991&zero=0&sign=1f8fec7c38b1ea867ae0013bdeb5d917f1a55d8ffd8610bf16e8f08573de0915"
+      }
+    },
+    {
+      "name": "float-values",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "integral": {
+          "$float": 2
+        },
+        "hundred": {
+          "$float": 100
+        },
+        "big": {
+          "$float": 120000
+        },
+        "tenth": {
+          "$float": 0.1
+        },
+        "third": {
+          "$float": 0.3333333333333333
+        },
+        "micro": {
+          "$float": 0.000001
+        },
+        "nano": {
+          "$float": 1e-7
+        },
+        "negNano": {
+          "$float": -1.5e-7
+        },
+        "huge": {
+          "$float": 1e+21
+        },
+        "safeMaxFloat": {
+          "$float": 9007199254740992
+        }
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "big=120000&huge=1e%2B21&hundred=100&integral=2&micro=0.000001&nano=1e-7&negNano=-1.5e-7&safeMaxFloat=9007199254740992&tenth=0.1&third=0.3333333333333333",
+        "sign": "765f961e3ece2c05a948e457a5ed2bafeef80006513071d619a13672f107d6b3",
+        "toString": "big=120000&huge=1e%2B21&hundred=100&integral=2&micro=0.000001&nano=1e-7&negNano=-1.5e-7&safeMaxFloat=9007199254740992&tenth=0.1&third=0.3333333333333333&sign=765f961e3ece2c05a948e457a5ed2bafeef80006513071d619a13672f107d6b3"
+      }
+    },
+    {
+      "name": "bigint-value",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "big": {
+          "$bigint": "12345678901234567890123"
+        },
+        "normal": 1
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "big=12345678901234567890123&normal=1",
+        "sign": "ff1a9a17e3f697f90c416ad7c1cb9727d210056f2b58fc47d32bccf8bcbc2f7c",
+        "toString": "big=12345678901234567890123&normal=1&sign=ff1a9a17e3f697f90c416ad7c1cb9727d210056f2b58fc47d32bccf8bcbc2f7c"
+      }
+    },
+    {
+      "name": "algo-md5",
+      "options": {
+        "secret": "qs-secret-2024",
+        "algorithm": "md5"
+      },
+      "data": {
+        "a": "x",
+        "b": 1
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "a=x&b=1",
+        "sign": "868c1669dda0288def2a272d2d919358",
+        "toString": "a=x&b=1&sign=868c1669dda0288def2a272d2d919358"
+      }
+    },
+    {
+      "name": "algo-sha1",
+      "options": {
+        "secret": "qs-secret-2024",
+        "algorithm": "sha1"
+      },
+      "data": {
+        "a": "x",
+        "b": 1
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "a=x&b=1",
+        "sign": "834b32430b572dc2f6deb1c73ed11cbb3c5a7380",
+        "toString": "a=x&b=1&sign=834b32430b572dc2f6deb1c73ed11cbb3c5a7380"
+      }
+    },
+    {
+      "name": "algo-sha512",
+      "options": {
+        "secret": "qs-secret-2024",
+        "algorithm": "sha512"
+      },
+      "data": {
+        "a": "x",
+        "b": 1
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "a=x&b=1",
+        "sign": "aa8cae57835847ecd5833f39da5eb7a7c4add332ef0b4ab0c381e1b46e00d75cd8d25a02fbfce4c83b731f95bc701c876509dd62227d5176904b75ef4e342061",
+        "toString": "a=x&b=1&sign=aa8cae57835847ecd5833f39da5eb7a7c4add332ef0b4ab0c381e1b46e00d75cd8d25a02fbfce4c83b731f95bc701c876509dd62227d5176904b75ef4e342061"
+      }
+    },
+    {
+      "name": "encoding-base64",
+      "options": {
+        "secret": "qs-secret-2024",
+        "encoding": "base64"
+      },
+      "data": {
+        "a": "x",
+        "b": 1,
+        "c": {
+          "d": [
+            1,
+            2
+          ]
+        }
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "a=x&b=1&c%5Bd%5D%5B0%5D=1&c%5Bd%5D%5B1%5D=2",
+        "sign": "yBH5hQ6fvYMvSbzhS+2OpqerjO9zhtageExJbsoLvPU=",
+        "toString": "a=x&b=1&c%5Bd%5D%5B0%5D=1&c%5Bd%5D%5B1%5D=2&sign=yBH5hQ6fvYMvSbzhS%2B2OpqerjO9zhtageExJbsoLvPU%3D"
+      }
+    },
+    {
+      "name": "hex-uppercase",
+      "options": {
+        "secret": "qs-secret-2024",
+        "uppercase": true
+      },
+      "data": {
+        "a": "x",
+        "b": 1
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "a=x&b=1",
+        "sign": "05793089106347D948CF915E3CDA45C32FBA4DE3D6C8124A9BA15E9D41A68088",
+        "toString": "a=x&b=1&sign=05793089106347D948CF915E3CDA45C32FBA4DE3D6C8124A9BA15E9D41A68088"
+      }
+    },
+    {
+      "name": "secret-with-unicode",
+      "options": {
+        "secret": "密钥🔑-ünïcødé"
+      },
+      "data": {
+        "a": 1
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "a=1",
+        "sign": "9604cbe1181c6824884dbb0785cd2240bfe3055f1fa82c3ce5c6313cbd44499a",
+        "toString": "a=1&sign=9604cbe1181c6824884dbb0785cd2240bfe3055f1fa82c3ce5c6313cbd44499a"
+      }
+    },
+    {
+      "name": "long-value",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "payload": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "tail": "end"
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "payload=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&tail=end",
+        "sign": "cef6b16b13cf8fc44ac5b67ccbcdc216ae8b6dd2c76208c488218422c929b0e6",
+        "toString": "payload=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&tail=end&sign=cef6b16b13cf8fc44ac5b67ccbcdc216ae8b6dd2c76208c488218422c929b0e6"
+      }
+    },
+    {
+      "name": "realistic-gateway-payload",
+      "options": {
+        "secret": "prod-secret",
+        "signField": "sign",
+        "algorithm": "sha256"
+      },
+      "data": {
+        "method": "trade.create",
+        "app_id": "2021000000000001",
+        "charset": "utf-8",
+        "version": "1.0",
+        "timestamp": "2024-05-01 12:30:45",
+        "biz_content": "{\"out_trade_no\":\"T20240501123045\",\"total_amount\":\"88.88\",\"subject\":\"测试订单 & 特殊字符 =/+%\",\"buyer_id\":\"2088000000000001\"}",
+        "extra": {
+          "notify_url": "https://example.com/cb?a=1&b=2",
+          "debug": false
+        }
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "app_id=2021000000000001&biz_content=%7B%22out_trade_no%22%3A%22T20240501123045%22%2C%22total_amount%22%3A%2288.88%22%2C%22subject%22%3A%22%E6%B5%8B%E8%AF%95%E8%AE%A2%E5%8D%95%20%26%20%E7%89%B9%E6%AE%8A%E5%AD%97%E7%AC%A6%20%3D%2F%2B%25%22%2C%22buyer_id%22%3A%222088000000000001%22%7D&charset=utf-8&extra%5Bdebug%5D=false&extra%5Bnotify_url%5D=https%3A%2F%2Fexample.com%2Fcb%3Fa%3D1%26b%3D2&method=trade.create&timestamp=2024-05-01%2012%3A30%3A45&version=1.0",
+        "sign": "6c9a561f8c8a5ceb9d35d9f7c8696572f8a60072c597fc3ccb8ae009d77af009",
+        "toString": "app_id=2021000000000001&biz_content=%7B%22out_trade_no%22%3A%22T20240501123045%22%2C%22total_amount%22%3A%2288.88%22%2C%22subject%22%3A%22%E6%B5%8B%E8%AF%95%E8%AE%A2%E5%8D%95%20%26%20%E7%89%B9%E6%AE%8A%E5%AD%97%E7%AC%A6%20%3D%2F%2B%25%22%2C%22buyer_id%22%3A%222088000000000001%22%7D&charset=utf-8&extra%5Bdebug%5D=false&extra%5Bnotify_url%5D=https%3A%2F%2Fexample.com%2Fcb%3Fa%3D1%26b%3D2&method=trade.create&timestamp=2024-05-01%2012%3A30%3A45&version=1.0&sign=6c9a561f8c8a5ceb9d35d9f7c8696572f8a60072c597fc3ccb8ae009d77af009"
+      }
+    },
+    {
+      "name": "throws-duplicate-flat-key",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "a[b]": "scalar",
+        "a": {
+          "b": "nested"
+        }
+      },
+      "throws": true
+    },
+    {
+      "name": "top-level-list-of-scalars",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": [
+        10,
+        20,
+        30
+      ],
+      "throws": false,
+      "expect": {
+        "stringToSign": "0=10&1=20&2=30",
+        "sign": "2750dfe941b6128c6af4b38c65c1bba72f285401fd7aced512c5afadd12d755f",
+        "toString": "0=10&1=20&2=30&sign=2750dfe941b6128c6af4b38c65c1bba72f285401fd7aced512c5afadd12d755f"
+      }
+    },
+    {
+      "name": "top-level-numeric-string-keys-interop",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": {
+        "0": "x",
+        "1": "y",
+        "2": "z"
+      },
+      "throws": false,
+      "expect": {
+        "stringToSign": "0=x&1=y&2=z",
+        "sign": "1b13309e15bcf4751e7d60e04a3e19560c56f05ec8449cdfe8f72b3339da4ea3",
+        "toString": "0=x&1=y&2=z&sign=1b13309e15bcf4751e7d60e04a3e19560c56f05ec8449cdfe8f72b3339da4ea3"
+      }
+    },
+    {
+      "name": "top-level-list-nested",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": [
+        {
+          "a": 1
+        },
+        [
+          1,
+          2
+        ],
+        {
+          "b": {
+            "c": "deep"
+          }
+        }
+      ],
+      "throws": false,
+      "expect": {
+        "stringToSign": "0%5Ba%5D=1&1%5B0%5D=1&1%5B1%5D=2&2%5Bb%5D%5Bc%5D=deep",
+        "sign": "f8e42175b13a12fccaa446a277f4f332e9d66b1906df8f24bde6ee21f5f147a0",
+        "toString": "0%5Ba%5D=1&1%5B0%5D=1&1%5B1%5D=2&2%5Bb%5D%5Bc%5D=deep&sign=f8e42175b13a12fccaa446a277f4f332e9d66b1906df8f24bde6ee21f5f147a0"
+      }
+    },
+    {
+      "name": "top-level-list-with-null-hole",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": [
+        1,
+        null,
+        3
+      ],
+      "throws": false,
+      "expect": {
+        "stringToSign": "0=1&2=3",
+        "sign": "face041bc740246b65c6a7158d0169ab9fec0543ebad6e00f53d17d53b1436bd",
+        "toString": "0=1&2=3&sign=face041bc740246b65c6a7158d0169ab9fec0543ebad6e00f53d17d53b1436bd"
+      }
+    },
+    {
+      "name": "top-level-list-empty",
+      "options": {
+        "secret": "qs-secret-2024"
+      },
+      "data": [],
+      "throws": false,
+      "expect": {
+        "stringToSign": "",
+        "sign": "2a93c0ee1e4c641d78c99441ff7a2c4b59e0aaf1b2aa6775d49883d2665260e1",
+        "toString": "sign=2a93c0ee1e4c641d78c99441ff7a2c4b59e0aaf1b2aa6775d49883d2665260e1"
+      }
+    },
+    {
+      "name": "top-level-list-with-base64",
+      "options": {
+        "secret": "qs-secret-2024",
+        "encoding": "base64"
+      },
+      "data": [
+        "a",
+        "b",
+        "c"
+      ],
+      "throws": false,
+      "expect": {
+        "stringToSign": "0=a&1=b&2=c",
+        "sign": "DCBkWtWaaFNDrqFp0z+qnDlRR1FArY29rudKPHheGZg=",
+        "toString": "0=a&1=b&2=c&sign=DCBkWtWaaFNDrqFp0z%2BqnDlRR1FArY29rudKPHheGZg%3D"
+      }
+    }
+  ]
+}

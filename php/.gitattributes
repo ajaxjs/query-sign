@@ -1,0 +1,10 @@
+# Composer 的 dist zip 由 `git archive` 生成，只认 export-ignore。
+# 不加这份文件，使用者 `composer install --prefer-dist` 会把测试与开发脚本一并下载。
+#
+# 注意：export-ignore 只影响归档产物，`--prefer-source` 或直接 clone 仍能拿到全部内容，
+# 因此不影响在本目录下开发调试。
+
+/tests/             export-ignore
+/scripts/           export-ignore
+/.gitattributes     export-ignore
+/composer.lock      export-ignore

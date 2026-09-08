@@ -1,0 +1,68 @@
+{
+  "name": "query-sign",
+  "version": "1.0.0",
+  "description": "跨语言一致的请求数据签名（HMAC）库。TypeScript 实现，与 PHP 版本 query-sign 产生完全相同的签名。",
+  "keywords": [
+    "sign",
+    "signature",
+    "hmac",
+    "query-string",
+    "verify",
+    "cross-language",
+    "typescript",
+    "php-compatible"
+  ],
+  "license": "MIT",
+  "author": "",
+  "type": "module",
+  "main": "./dist/cjs/query-sign.js",
+  "module": "./dist/esm/query-sign.js",
+  "types": "./dist/esm/query-sign.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/query-sign.d.ts",
+        "default": "./dist/esm/query-sign.js"
+      },
+      "require": {
+        "types": "./dist/cjs/query-sign.d.ts",
+        "default": "./dist/cjs/query-sign.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER/query-sign.git",
+    "directory": "nodejs"
+  },
+  "bugs": {
+    "url": "https://github.com/OWNER/query-sign/issues"
+  },
+  "homepage": "https://github.com/OWNER/query-sign#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "clean": "node scripts/clean.js",
+    "build": "npm run clean && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && node scripts/fixup.js",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "node --test",
+    "test:dist": "node scripts/verify-dist.js",
+    "check": "npm run typecheck && npm test && npm run build && npm run test:dist",
+    "prepublishOnly": "npm run check"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.2",
+    "typescript": "^5.9.3"
+  }
+}

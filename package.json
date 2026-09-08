@@ -1,0 +1,24 @@
+{
+  "name": "query-sign-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "query-sign 多语言签名库仓库根。本包不发布，仅提供跨语言的校验与发布入口。",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "fixtures": "node test/generate-fixtures.mjs",
+    "cross-check": "node test/cross-check.mjs",
+    "build": "npm --prefix nodejs run build",
+    "test:node": "npm --prefix nodejs test",
+    "test:php": "php php/tests/run.php",
+    "test:scripts": "node --test \"scripts/lib/*.test.mjs\"",
+    "lint:php": "php php/scripts/lint.php",
+    "test": "npm run test:node && npm run test:php && npm run test:scripts",
+    "verify": "node scripts/verify.mjs",
+    "release": "node scripts/release.mjs",
+    "release:dry": "node scripts/release.mjs --dry-run"
+  }
+}
