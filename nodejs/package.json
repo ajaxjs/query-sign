@@ -1,6 +1,6 @@
 {
   "name": "query-sign-node",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "跨语言一致的请求数据签名（HMAC）库。TypeScript 实现，与 Composer 包 ajaxjs/query-sign-php 产生完全相同的签名。",
   "keywords": [
     "sign",
