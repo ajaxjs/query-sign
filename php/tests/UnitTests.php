@@ -56,8 +56,8 @@ final class UnitTests
     {
         Harness::group('常量与元信息');
 
-        Harness::test('SPEC_VERSION 为 1', static function (): void {
-            Harness::assertSame(1, QuerySign::SPEC_VERSION);
+        Harness::test('SPEC_VERSION 为 2', static function (): void {
+            Harness::assertSame(2, QuerySign::SPEC_VERSION);
         });
 
         Harness::test('COMMON_ALGORITHMS 均被当前 PHP 支持', static function (): void {
@@ -98,6 +98,18 @@ final class UnitTests
             });
         });
 
+        Harness::test('signMap 为空串抛异常', static function (): void {
+            Harness::assertThrows(InvalidArgumentException::class, static function (): void {
+                new QuerySign(['secret' => 's', 'signMap' => '']);
+            });
+        });
+
+        Harness::test('signMap 与 signField 同名抛异常', static function (): void {
+            Harness::assertThrows(InvalidArgumentException::class, static function (): void {
+                new QuerySign(['secret' => 's', 'signMap' => 'sign']);
+            });
+        });
+
         Harness::test('encoding 非法抛异常', static function (): void {
             Harness::assertThrows(InvalidArgumentException::class, static function (): void {
                 new QuerySign(['secret' => 's', 'encoding' => 'base32']);
@@ -125,6 +137,7 @@ final class UnitTests
             Harness::assertSame([
                 'secret' => self::SECRET,
                 'signField' => 'sign',
+                'signMap' => 'sign_map',
                 'algorithm' => 'sha1',
                 'encoding' => 'hex',
                 'uppercase' => false,
@@ -190,7 +203,7 @@ final class UnitTests
             $qs->data([10, 20]);
             $signed = $qs->sign();
             Harness::assertFalse(self::isListShape($signed), 'sign() 必须恒返回映射');
-            Harness::assertSame([0 => 10, 1 => 20, 'sign' => $qs->getSign()], $signed);
+            Harness::assertSame([0 => 10, 1 => 20, 'sign_map' => '0+1', 'sign' => $qs->getSign()], $signed);
             // 签名字段必须能被 json_encode 保留，与 Node.js 端形态一致
             Harness::assertStringContains('"sign":"' . $qs->getSign() . '"', (string) json_encode($signed));
         });
@@ -312,10 +325,23 @@ final class UnitTests
             Harness::assertSame('real=yes', $qs->getStringToSign());
         });
 
-        Harness::test('顶层签名字段被剔除', static function (): void {
+        Harness::test('签名时顶层出现签名字段视为关键字冲突', static function (): void {
             $qs = self::make();
             $qs->data(['a' => 1, 'sign' => 'stale']);
-            Harness::assertSame('a=1', $qs->getStringToSign());
+            Harness::assertThrows(InvalidArgumentException::class, static function () use ($qs): void {
+                $qs->getStringToSign();
+            });
+            Harness::assertThrows(InvalidArgumentException::class, static function () use ($qs): void {
+                $qs->getSign();
+            });
+        });
+
+        Harness::test('签名时顶层出现 sign_map 字段视为关键字冲突', static function (): void {
+            $qs = self::make();
+            $qs->data(['a' => 1, 'sign_map' => 'a']);
+            Harness::assertThrows(InvalidArgumentException::class, static function () use ($qs): void {
+                $qs->getSign();
+            });
         });
 
         Harness::test('嵌套签名字段照常参与签名', static function (): void {
@@ -324,9 +350,9 @@ final class UnitTests
             Harness::assertSame('a=1&meta%5Bsign%5D=inner', $qs->getStringToSign());
         });
 
-        Harness::test('自定义 signField', static function (): void {
+        Harness::test('自定义 signField 后同名字段才算冲突', static function (): void {
             $qs = self::make(['signField' => 'signature']);
-            $qs->data(['a' => 1, 'sign' => 'kept', 'signature' => 'dropped']);
+            $qs->data(['a' => 1, 'sign' => 'kept']);
             Harness::assertSame('a=1&sign=kept', $qs->getStringToSign());
         });
 
@@ -449,17 +475,40 @@ final class UnitTests
 
             Harness::assertSame(1, $signed['a']);
             Harness::assertSame(['b' => 2], $signed['n']);
+            Harness::assertSame('a+n', $signed['sign_map']);
             Harness::assertSame($qs->getSign(), $signed['sign']);
         });
 
-        Harness::test('sign() 覆盖已有的过期签名字段且不产生重复键', static function (): void {
+        Harness::test('sign() 遇到关键字冲突直接抛异常', static function (): void {
             $qs = self::make();
             $qs->data(['a' => 1, 'sign' => 'stale-value']);
-            $signed = $qs->sign();
+            Harness::assertThrows(InvalidArgumentException::class, static function () use ($qs): void {
+                $qs->sign();
+            });
 
-            Harness::assertSame(['a', 'sign'], array_keys($signed));
-            Harness::assertSame($qs->getSign(), $signed['sign']);
-            Harness::assertFalse($signed['sign'] === 'stale-value');
+            $withMap = self::make();
+            $withMap->data(['a' => 1, 'sign_map' => 'a']);
+            Harness::assertThrows(InvalidArgumentException::class, static function () use ($withMap): void {
+                $withMap->sign();
+            });
+        });
+
+        Harness::test('sign_map 字段名可自定义', static function (): void {
+            $qs = self::make(['signMap' => 'signed_fields']);
+            $qs->data(['a' => 1, 'b' => 2]);
+            Harness::assertSame('a+b', $qs->sign()['signed_fields']);
+        });
+
+        Harness::test('sign_map 中的 % 与 + 会被转义', static function (): void {
+            $qs = self::make();
+            $qs->data(['a+b' => 1, '100%' => 2, 'name' => 'kevin']);
+            Harness::assertSame('a%2Bb+100%25+name', $qs->sign()['sign_map']);
+        });
+
+        Harness::test('sign_map 的字段顺序与 JS Object.keys 一致（数字键在前）', static function (): void {
+            $qs = self::make();
+            $qs->data(['b' => 2, '10' => 'a', 'a' => 1]);
+            Harness::assertSame('10+b+a', $qs->sign()['sign_map']);
         });
 
         Harness::test('sign() 不修改内部数据', static function (): void {
@@ -475,6 +524,7 @@ final class UnitTests
             $signed = $qs->sign();
             Harness::assertTrue(array_key_exists('signature', $signed));
             Harness::assertFalse(array_key_exists('sign', $signed));
+            Harness::assertSame('a', $signed['sign_map']);
         });
 
         Harness::test('verify() 省略参数时从数据中读取', static function (): void {
@@ -508,6 +558,68 @@ final class UnitTests
             $qs = self::make();
             $qs->data(['a' => 1]);
             Harness::assertFalse($qs->verify());
+        });
+
+        Harness::test('verify() 按 sign_map 取字段，忽略未签名的额外字段', static function (): void {
+            $qs = self::make();
+            $qs->data(['name' => 'kevin', 'age' => 20]);
+            $sign = $qs->getSign();
+
+            $qs->data([
+                'name' => 'kevin',
+                'age' => 20,
+                'sign_map' => 'name+age',
+                'extra' => 'unsigned',
+                'sign' => $sign,
+            ]);
+            Harness::assertTrue($qs->verify());
+        });
+
+        Harness::test('verify() sign_map 声明的字段缺失时抛异常', static function (): void {
+            $qs = self::make();
+            $qs->data(['name' => 'kevin', 'sign_map' => 'name+age', 'sign' => str_repeat('x', 64)]);
+            Harness::assertThrows(InvalidArgumentException::class, static function () use ($qs): void {
+                $qs->verify();
+            });
+        });
+
+        Harness::test('verify() sign_map 非字符串时抛异常', static function (): void {
+            $qs = self::make();
+            $qs->data(['name' => 'kevin', 'sign_map' => ['name'], 'sign' => str_repeat('x', 64)]);
+            Harness::assertThrows(InvalidArgumentException::class, static function () use ($qs): void {
+                $qs->verify();
+            });
+        });
+
+        Harness::test('verify() sign_map 声明保留字段时抛异常', static function (): void {
+            $qs = self::make();
+            $qs->data(['name' => 'kevin', 'sign_map' => 'sign', 'sign' => str_repeat('x', 64)]);
+            Harness::assertThrows(InvalidArgumentException::class, static function () use ($qs): void {
+                $qs->verify();
+            });
+        });
+
+        Harness::test('verify() 按 sign_map 取值后签名被篡改返回 false', static function (): void {
+            $qs = self::make();
+            $qs->data(['name' => 'kevin', 'age' => 20]);
+            $sign = $qs->getSign();
+
+            $qs->data(['name' => 'kevin2', 'age' => 20, 'sign_map' => 'name+age', 'sign' => $sign]);
+            Harness::assertFalse($qs->verify());
+        });
+
+        Harness::test('verify() 没有 sign_map 时保持旧的全量验签行为', static function (): void {
+            $qs = self::make();
+            $qs->data(['a' => 1]);
+            $sign = $qs->getSign();
+            $qs->data(['a' => 1, 'sign' => $sign]);
+            Harness::assertTrue($qs->verify());
+        });
+
+        Harness::test('verify() 可直接验证 sign() 的结果', static function (): void {
+            $qs = self::make();
+            $signed = $qs->data(['name' => 'kevin', 'age' => 20])->sign();
+            Harness::assertTrue($qs->data($signed)->verify());
         });
 
         Harness::test('verify() 对非字符串输入返回 false 且不抛异常', static function (): void {
@@ -594,33 +706,33 @@ final class UnitTests
             Harness::assertSame($qs->toString(), (string) $qs);
         });
 
-        Harness::test('拼接格式为 key=value&...&sign=签名', static function (): void {
+        Harness::test('拼接格式为 key=value&...&sign_map=字段列表&sign=签名', static function (): void {
             $qs = self::make();
             $qs->data(['b' => 2, 'a' => 1]);
             Harness::assertSame(
-                'a=1&b=2&sign=' . $qs->getSign(),
+                'a=1&b=2&sign_map=b%2Ba&sign=' . $qs->getSign(),
                 $qs->toString()
             );
         });
 
-        Harness::test('空数据时无前导 &', static function (): void {
+        Harness::test('空数据时 sign_map 为空串且无前导 &', static function (): void {
             $qs = self::make();
             $qs->data([]);
-            Harness::assertSame('sign=' . $qs->getSign(), $qs->toString());
+            Harness::assertSame('sign_map=&sign=' . $qs->getSign(), $qs->toString());
         });
 
-        Harness::test('数据中原有的 sign 只出现一次', static function (): void {
+        Harness::test('数据中原有的 sign 会被视为关键字冲突', static function (): void {
             $qs = self::make();
             $qs->data(['a' => 1, 'sign' => 'stale']);
-            $str = $qs->toString();
-            Harness::assertSame(1, substr_count($str, 'sign='));
-            Harness::assertSame('a=1&sign=' . $qs->getSign(), $str);
+            Harness::assertThrows(InvalidArgumentException::class, static function () use ($qs): void {
+                $qs->toString();
+            });
         });
 
-        Harness::test('自定义 signField 出现在末尾', static function (): void {
+        Harness::test('自定义 signField 后 sign_map 与签名都出现在末尾', static function (): void {
             $qs = self::make(['signField' => 'signature']);
             $qs->data(['a' => 1]);
-            Harness::assertSame('a=1&signature=' . $qs->getSign(), $qs->toString());
+            Harness::assertSame('a=1&sign_map=a&signature=' . $qs->getSign(), $qs->toString());
         });
 
         Harness::test('base64 签名在 toString 中被正确转义', static function (): void {
@@ -651,6 +763,7 @@ final class UnitTests
             Harness::assertSame('张三', $parsed['name']);
             Harness::assertSame(['a', 'b'], $parsed['tags']);
             Harness::assertSame('true', $parsed['ok']);
+            Harness::assertSame('name+tags+ok', $parsed['sign_map']);
             Harness::assertSame($qs->getSign(), $parsed['sign']);
         });
     }

@@ -58,7 +58,7 @@ qs.getSign();
 // => 'aca22e904d66fb82b613f97e2867e9e65270d4cde0f9aa62236798d450e50e71'
 
 qs.toString();
-// => 'appId=wx1234567890&nonce=a1b2c3&ts=1700000000&user%5Bid%5D=7&user%5Bname%5D=tom&sign=aca22e90...'
+// => 'appId=wx1234567890&nonce=a1b2c3&ts=1700000000&user%5Bid%5D=7&user%5Bname%5D=tom&sign_map=appId%2Bts%2Bnonce%2Buser&sign=aca22e90...'
 ```
 
 ### PHP
@@ -79,7 +79,7 @@ $qs->getSign();
 // => 'aca22e904d66fb82b613f97e2867e9e65270d4cde0f9aa62236798d450e50e71'
 
 (string) $qs;
-// => 'appId=wx1234567890&nonce=a1b2c3&ts=1700000000&user%5Bid%5D=7&user%5Bname%5D=tom&sign=aca22e90...'
+// => 'appId=wx1234567890&nonce=a1b2c3&ts=1700000000&user%5Bid%5D=7&user%5Bname%5D=tom&sign_map=appId%2Bts%2Bnonce%2Buser&sign=aca22e90...'
 ```
 
 签名完全相同。安装方式、完整 API、各类边界行为的说明见
@@ -95,9 +95,9 @@ $qs->getSign();
 | `getData()` | object / array | 当前数据的深拷贝 |
 | `getStringToSign()` | string | 规范化后的待签名字符串。**跨语言排查签名不一致时先看这个** |
 | `getSign()` | string | 计算并返回签名字符串 |
-| `sign()` | object / array | 返回「原始数据 + 签名字段」的新映射，不修改内部数据 |
-| `verify(sign?)` | bool | 验签；`sign` 省略时从数据里读 `signField`。**任何非法输入都返回 `false`，不抛错** |
-| `toString()` | string | `key=value&...&sign=签名`，可直接作为 query string |
+| `sign()` | object / array | 返回「原始数据 + `sign_map` + 签名字段」的新映射，不修改内部数据 |
+| `verify(sign?)` | bool | 验签；`sign` 省略时从数据里读 `signField`。**签名不匹配返回 `false`；`sign_map` 声明字段缺失等结构错误直接抛错** |
+| `toString()` | string | `key=value&...&sign_map=字段列表&sign=签名`，可直接作为 query string |
 
 配置项（两端一致）：
 
@@ -105,6 +105,7 @@ $qs->getSign();
 | --- | --- | --- |
 | `secret` | — | **必填**，非空字符串 |
 | `signField` | `'sign'` | 签名字段名，顶层该字段不参与签名 |
+| `signMap` | `'sign_map'` | 记录参与签名字段列表的字段名，本身不参与 HMAC |
 | `algorithm` | `'sha256'` | HMAC 算法，跨端请选 `md5`/`sha1`/`sha224`/`sha256`/`sha384`/`sha512` |
 | `encoding` | `'hex'` | `hex` 或 `base64` |
 | `uppercase` | `false` | `hex` 输出转大写；对 `base64` 静默忽略 |
@@ -116,7 +117,7 @@ $qs->getSign();
 
 完整规范见 [`docs/SPEC.md`](./docs/SPEC.md)，六步：
 
-1. **剔除签名字段** —— 只剔除**顶层**键名严格等于 `signField` 的字段
+1. **剔除保留字段** —— 顶层键名严格等于 `signField` 或 `signMap` 的字段不参与签名；但签名入口发现它们已存在时会直接报「参数与关键字重叠」
 2. **扁平化** —— `{ a: { b: [1] } }` → `a[b][0] = 1`；`null` 的键整体丢弃；空对象/空数组不产生键
 3. **字符串化** —— 布尔转 `true`/`false`；数字用最短往返表示；`NaN`/`Infinity` 抛错
 4. **排序** —— 键名按 **UTF-8 字节**的无符号字典序升序（不是码点序，也不是本地 collation）

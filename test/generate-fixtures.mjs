@@ -20,7 +20,7 @@ const nodePkg = JSON.parse(
   readFileSync(resolve(root, 'nodejs/package.json'), 'utf8')
 );
 
-const { QuerySign } = await import(
+const { QuerySign, SPEC_VERSION } = await import(
   pathToFileURL(resolve(root, 'nodejs/dist/esm/query-sign.js')).href
 );
 
@@ -64,6 +64,7 @@ const O = {
   base64: { secret: SECRET, encoding: 'base64' },
   upper: { secret: SECRET, uppercase: true },
   customField: { secret: SECRET, signField: 'signature' },
+  customSignMap: { secret: SECRET, signMap: 'signature_map' },
   loose: { secret: SECRET, loose: true },
 };
 
@@ -145,9 +146,11 @@ const cases = [
     data: { a: [10, null, 20] },
   },
   {
-    name: 'top-level-sign-field-excluded',
+    // SPEC 3.1：签名时 data 中不得出现 signField / signMap，否则视为关键字冲突
+    name: 'top-level-sign-field-conflict',
     options: O.def,
-    data: { a: 1, sign: 'stale-signature-must-be-ignored' },
+    data: { a: 1, sign: 'stale-signature' },
+    throws: true,
   },
   {
     name: 'nested-sign-field-not-excluded',
@@ -157,7 +160,24 @@ const cases = [
   {
     name: 'custom-sign-field',
     options: O.customField,
-    data: { a: 1, sign: 'kept-because-not-signField', signature: 'dropped' },
+    data: { a: 1, sign: 'kept-because-not-signField' },
+  },
+  {
+    name: 'custom-sign-field-conflict',
+    options: O.customField,
+    data: { a: 1, signature: 'dropped' },
+    throws: true,
+  },
+  {
+    name: 'custom-sign-map-field',
+    options: O.customSignMap,
+    data: { a: 1, b: 'x' },
+  },
+  {
+    name: 'sign-map-key-conflict',
+    options: O.def,
+    data: { a: 1, sign_map: 'x' },
+    throws: true,
   },
   {
     name: 'empty-data',
@@ -165,9 +185,16 @@ const cases = [
     data: {},
   },
   {
-    name: 'only-sign-field',
+    name: 'only-sign-field-conflict',
     options: O.def,
     data: { sign: 'whatever' },
+    throws: true,
+  },
+  {
+    // sign_map 用 `+` 连接字段名，字段名里的 `+` / `%` 必须转义，保证可无歧义还原
+    name: 'sign-map-field-name-escaping',
+    options: O.def,
+    data: { 'a+b': 1, '100%': 2, name: 'kevin' },
   },
   {
     name: 'rfc3986-special-chars',
@@ -358,7 +385,7 @@ for (const item of cases) {
 const doc = {
   $comment:
     '由 test/generate-fixtures.mjs 生成，请勿手工编辑。所有语言实现必须逐字段匹配本文件。',
-  specVersion: 1,
+  specVersion: SPEC_VERSION,
   referenceImplementation: `query-sign (nodejs) v${nodePkg.version}`,
   cases: generated,
 };

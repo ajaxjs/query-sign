@@ -22,8 +22,8 @@ function anyData(value: unknown): SignableData {
 }
 
 describe('常量与工具', () => {
-  it('SPEC_VERSION 为 1', () => {
-    assert.equal(SPEC_VERSION, 1);
+  it('SPEC_VERSION 为 2', () => {
+    assert.equal(SPEC_VERSION, 2);
   });
 
   it('encodeRfc3986 与 PHP rawurlencode 一致', () => {
@@ -62,6 +62,14 @@ describe('构造参数校验', () => {
     assert.throws(() => make({ signField: '' }), TypeError);
   });
 
+  it('signMap 为空串抛 TypeError', () => {
+    assert.throws(() => make({ signMap: '' }), TypeError);
+  });
+
+  it('signMap 与 signField 同名抛 TypeError', () => {
+    assert.throws(() => make({ signMap: 'sign' }), TypeError);
+  });
+
   it('encoding 非法抛 TypeError', () => {
     assert.throws(() => make({ encoding: 'base32' }), TypeError);
   });
@@ -75,6 +83,7 @@ describe('构造参数校验', () => {
     assert.deepEqual(qs.options, {
       secret: SECRET,
       signField: 'sign',
+      signMap: 'sign_map',
       algorithm: 'sha1',
       encoding: 'hex',
       uppercase: false,
@@ -138,7 +147,7 @@ describe('data() 契约', () => {
     qs.data([10, 20]);
     const signed = qs.sign();
     assert.equal(Array.isArray(signed), false, 'sign() 必须恒返回映射');
-    assert.deepEqual(signed, { '0': 10, '1': 20, sign: qs.getSign() });
+    assert.deepEqual(signed, { '0': 10, '1': 20, sign_map: '0+1', sign: qs.getSign() });
     // JS 给数组附加字符串属性会被 JSON.stringify 静默丢弃，这里确保不会
     assert.equal((JSON.parse(JSON.stringify(signed)) as { sign: string }).sign, qs.getSign());
   });
@@ -251,10 +260,17 @@ describe('规范化 stringToSign', () => {
     assert.equal(qs.getStringToSign(), 'real=yes');
   });
 
-  it('顶层签名字段被剔除', () => {
+  it('签名时顶层出现签名字段视为关键字冲突', () => {
     const qs = make();
     qs.data({ a: 1, sign: 'stale' });
-    assert.equal(qs.getStringToSign(), 'a=1');
+    assert.throws(() => qs.getStringToSign(), /关键字重叠/u);
+    assert.throws(() => qs.getSign(), /关键字重叠/u);
+  });
+
+  it('签名时顶层出现 sign_map 字段视为关键字冲突', () => {
+    const qs = make();
+    qs.data({ a: 1, sign_map: 'a' });
+    assert.throws(() => qs.getSign(), /关键字重叠/u);
   });
 
   it('嵌套签名字段照常参与签名', () => {
@@ -263,9 +279,9 @@ describe('规范化 stringToSign', () => {
     assert.equal(qs.getStringToSign(), 'a=1&meta%5Bsign%5D=inner');
   });
 
-  it('自定义 signField', () => {
+  it('自定义 signField 后同名字段才算冲突', () => {
     const qs = make({ signField: 'signature' });
-    qs.data({ a: 1, sign: 'kept', signature: 'dropped' });
+    qs.data({ a: 1, sign: 'kept' });
     assert.equal(qs.getStringToSign(), 'a=1&sign=kept');
   });
 
@@ -383,17 +399,36 @@ describe('getSign() / sign() / verify()', () => {
 
     assert.equal(signed.a, 1);
     assert.deepEqual(signed.n, { b: 2 });
+    assert.equal(signed.sign_map, 'a+n');
     assert.equal(signed.sign, qs.getSign());
   });
 
-  it('sign() 覆盖过期签名字段且不产生重复键', () => {
+  it('sign() 遇到关键字冲突直接抛 TypeError', () => {
     const qs = make();
     qs.data({ a: 1, sign: 'stale-value' });
-    const signed = qs.sign();
+    assert.throws(() => qs.sign(), /关键字重叠/u);
 
-    assert.deepEqual(Object.keys(signed), ['a', 'sign']);
-    assert.equal(signed.sign, qs.getSign());
-    assert.notEqual(signed.sign, 'stale-value');
+    const withMap = make();
+    withMap.data({ a: 1, sign_map: 'a' });
+    assert.throws(() => withMap.sign(), /关键字重叠/u);
+  });
+
+  it('sign_map 字段名可自定义', () => {
+    const qs = make({ signMap: 'signed_fields' });
+    qs.data({ a: 1, b: 2 });
+    assert.equal(qs.sign().signed_fields, 'a+b');
+  });
+
+  it('sign_map 中的 % 与 + 会被转义', () => {
+    const qs = make();
+    qs.data({ 'a+b': 1, '100%': 2, name: 'kevin' });
+    assert.equal(qs.sign().sign_map, 'a%2Bb+100%25+name');
+  });
+
+  it('sign() 的字段列表与 JS 对象键序一致（数字键在前）', () => {
+    const qs = make();
+    qs.data({ b: 2, 10: 'a', a: 1 });
+    assert.equal(qs.sign().sign_map, '10+b+a');
   });
 
   it('sign() 不修改内部数据', () => {
@@ -409,6 +444,7 @@ describe('getSign() / sign() / verify()', () => {
     const signed = qs.sign();
     assert.ok('signature' in signed);
     assert.ok(!('sign' in signed));
+    assert.equal(signed.sign_map, 'a');
   });
 
   it('verify() 省略参数时从数据中读取', () => {
@@ -439,6 +475,56 @@ describe('getSign() / sign() / verify()', () => {
     const qs = make();
     qs.data({ a: 1 });
     assert.equal(qs.verify(), false);
+  });
+
+  it('verify() 按 sign_map 取字段，忽略未签名的额外字段', () => {
+    const qs = make();
+    qs.data({ name: 'kevin', age: 20 });
+    const sign = qs.getSign();
+
+    qs.data({ name: 'kevin', age: 20, sign_map: 'name+age', extra: 'unsigned', sign });
+    assert.equal(qs.verify(), true);
+  });
+
+  it('verify() sign_map 声明的字段在数据中缺失时抛 TypeError', () => {
+    const qs = make();
+    qs.data({ name: 'kevin', sign_map: 'name+age', sign: 'x'.repeat(64) });
+    assert.throws(() => qs.verify(), /"age" 在数据中不存在/u);
+  });
+
+  it('verify() sign_map 字段非字符串时抛 TypeError', () => {
+    const qs = make();
+    qs.data({ name: 'kevin', sign_map: ['name'], sign: 'x'.repeat(64) });
+    assert.throws(() => qs.verify(), /必须是字符串/u);
+  });
+
+  it('verify() sign_map 声明的保留字段抛出 TypeError', () => {
+    const qs = make();
+    qs.data({ name: 'kevin', sign_map: 'sign', sign: 'x'.repeat(64) });
+    assert.throws(() => qs.verify(), /不能声明保留字段/u);
+  });
+
+  it('verify() 按 sign_map 取值后签名被篡改返回 false', () => {
+    const qs = make();
+    qs.data({ name: 'kevin', age: 20 });
+    const sign = qs.getSign();
+
+    qs.data({ name: 'kevin2', age: 20, sign_map: 'name+age', sign });
+    assert.equal(qs.verify(), false);
+  });
+
+  it('verify() 没有 sign_map 时保持旧的全量验签行为', () => {
+    const qs = make();
+    qs.data({ a: 1 });
+    const sign = qs.getSign();
+    qs.data({ a: 1, sign });
+    assert.equal(qs.verify(), true);
+  });
+
+  it('verify() 从 sign() 结果直接验签', () => {
+    const qs = make();
+    const signed = qs.data({ name: 'kevin', age: 20 }).sign();
+    assert.equal(qs.data(signed).verify(), true);
   });
 
   it('verify() 对非法输入返回 false 且不抛错', () => {
@@ -533,30 +619,28 @@ describe('getSign() / sign() / verify()', () => {
 });
 
 describe('toString()', () => {
-  it('拼接格式为 key=value&...&sign=签名', () => {
+  it('拼接格式为 key=value&...&sign_map=字段列表&sign=签名', () => {
     const qs = make();
     qs.data({ b: 2, a: 1 });
-    assert.equal(qs.toString(), `a=1&b=2&sign=${qs.getSign()}`);
+    assert.equal(qs.toString(), `a=1&b=2&sign_map=b%2Ba&sign=${qs.getSign()}`);
   });
 
-  it('空数据时无前导 &', () => {
+  it('空数据时 sign_map 为空串且无前导 &', () => {
     const qs = make();
     qs.data({});
-    assert.equal(qs.toString(), `sign=${qs.getSign()}`);
+    assert.equal(qs.toString(), `sign_map=&sign=${qs.getSign()}`);
   });
 
-  it('数据中原有的 sign 只出现一次', () => {
+  it('数据中原有的 sign 会被视为关键字冲突', () => {
     const qs = make();
     qs.data({ a: 1, sign: 'stale' });
-    const str = qs.toString();
-    assert.equal(str.split('sign=').length - 1, 1);
-    assert.equal(str, `a=1&sign=${qs.getSign()}`);
+    assert.throws(() => qs.toString(), /关键字重叠/u);
   });
 
-  it('自定义 signField 出现在末尾', () => {
+  it('自定义 signField 后 sign_map 与签名都出现在末尾', () => {
     const qs = make({ signField: 'signature' });
     qs.data({ a: 1 });
-    assert.equal(qs.toString(), `a=1&signature=${qs.getSign()}`);
+    assert.equal(qs.toString(), `a=1&sign_map=a&signature=${qs.getSign()}`);
   });
 
   it('base64 签名被正确转义', () => {
@@ -581,6 +665,7 @@ describe('toString()', () => {
     assert.equal(params.get('tags[0]'), 'a');
     assert.equal(params.get('tags[1]'), 'b');
     assert.equal(params.get('ok'), 'true');
+    assert.equal(params.get('sign_map'), 'name+tags+ok');
     assert.equal(params.get('sign'), qs.getSign());
   });
 

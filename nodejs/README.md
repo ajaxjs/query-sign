@@ -57,11 +57,12 @@ qs.getSign();
 // => 'aca22e904d66fb82b613f97e2867e9e65270d4cde0f9aa62236798d450e50e71'
 
 qs.toString();
-// => 'appId=wx1234567890&nonce=a1b2c3&ts=1700000000&user%5Bid%5D=7&user%5Bname%5D=tom&sign=aca22e904d66fb82b613f97e2867e9e65270d4cde0f9aa62236798d450e50e71'
+// => 'appId=wx1234567890&nonce=a1b2c3&ts=1700000000&user%5Bid%5D=7&user%5Bname%5D=tom&sign_map=appId%2Bts%2Bnonce%2Buser&sign=aca22e904d66fb82b613f97e2867e9e65270d4cde0f9aa62236798d450e50e71'
 
 qs.sign();
 // => { appId: 'wx1234567890', ts: 1700000000, nonce: 'a1b2c3',
-//      user: { id: 7, name: 'tom' }, sign: 'aca22e90...' }
+//      user: { id: 7, name: 'tom' }, sign_map: 'appId+ts+nonce+user',
+//      sign: 'aca22e90...' }
 ```
 
 ### 服务端验签
@@ -79,6 +80,10 @@ if (!qs.verify()) {
 
 `verify()` 省略参数时会自动从数据里读取 `signField`（默认 `sign`）。
 注意：该字段本身**不参与**签名计算，所以可以直接把整个请求参数丢进来。
+
+若数据里带 `sign_map`（`sign()` 的产物），验签会**只按它声明的字段**重算签名，
+请求中额外的、无需签名的参数会被忽略。`sign_map` 声明的字段在数据中缺失时，
+`verify()` 会直接抛错，便于区分「签名伪造」与「漏传参数」。
 
 ### 与 PHP 端互验
 
@@ -107,6 +112,7 @@ $qs->getSign();
 | --- | --- | --- | --- |
 | `secret` | `string` | — | **必填**，非空字符串。为空时构造即抛 `TypeError` |
 | `signField` | `string` | `'sign'` | 签名字段名。该字段在顶层被排除，不参与签名 |
+| `signMap` | `string` | `'sign_map'` | 记录参与签名字段列表的字段名，本身不参与 HMAC |
 | `algorithm` | `string` | `'sha256'` | HMAC 算法。跨端使用请选两端都支持的：`md5` / `sha1` / `sha224` / `sha256` / `sha384` / `sha512` |
 | `encoding` | `'hex' \| 'base64'` | `'hex'` | 签名输出编码 |
 | `uppercase` | `boolean` | `false` | 是否把 `hex` 输出转大写。对 `base64` 静默忽略 |
@@ -123,9 +129,9 @@ $qs->getSign();
 | `getData()` | `object \| array` | 当前数据的深拷贝 |
 | `getStringToSign()` | `string` | 规范化后的待签名字符串。**跨语言排查签名不一致时先看这个** |
 | `getSign()` | `string` | 计算并返回签名字符串 |
-| `sign()` | `object` | 返回「原始数据 + 签名字段」的新对象，不修改内部数据 |
-| `verify(sign?)` | `boolean` | 验签。任何非法输入都返回 `false`，不抛错 |
-| `toString()` | `string` | `key=value&...&sign=签名`，可直接作为 query string |
+| `sign()` | `object` | 返回「原始数据 + `sign_map` + 签名字段」的新对象，不修改内部数据 |
+| `verify(sign?)` | `boolean` | 验签。签名不匹配返回 `false`；`sign_map` 声明的字段缺失等结构错误抛 `TypeError` |
+| `toString()` | `string` | `key=value&...&sign_map=字段列表&sign=签名`，可直接作为 query string |
 | `options` | `object` | 只读的当前生效配置（含默认值） |
 
 ### 导出
@@ -156,7 +162,7 @@ import type {
 
 完整规范见 [SPEC.md](https://github.com/ajaxjs/query-sign/blob/main/docs/SPEC.md)，摘要如下：
 
-1. **剔除签名字段** —— 只剔除**顶层**键名严格等于 `signField` 的字段，嵌套层级中的同名字段照常参与
+1. **剔除保留字段** —— 顶层键名严格等于 `signField` / `signMap` 的字段不参与签名；签名入口发现它们已存在会抛「参数与关键字重叠」
 2. **扁平化** —— `{ a: { b: [1] } }` → `a[b][0] = 1`；`null` / `undefined` 的键被整体丢弃；空对象/空数组不产生任何键
 3. **字符串化** —— 布尔转 `true` / `false`；数字用最短往返表示；`NaN` / `Infinity` 抛错
 4. **排序** —— 键名按 **UTF-8 字节**的无符号字典序升序（不是码点序，也不是本地 collation）
@@ -206,7 +212,7 @@ qs.getSign();
 // => 'e6u2DDb5kxLyBwzj6aPU1ywvhZ3fMgxH/XC2YijLgQc='
 
 qs.toString();
-// => 'a=x&b=1&c%5Bd%5D%5B0%5D=1&c%5Bd%5D%5B1%5D=2&sign=e6u2DDb5kxLyBwzj6aPU1ywvhZ3fMgxH%2FXC2YijLgQc%3D'
+// => 'a=x&b=1&c%5Bd%5D%5B0%5D=1&c%5Bd%5D%5B1%5D=2&sign_map=a%2Bb%2Bc&sign=e6u2DDb5kxLyBwzj6aPU1ywvhZ3fMgxH%2FXC2YijLgQc%3D'
 ```
 
 `getSign()` 返回的是**未编码**的原始签名值，放进 JSON body 时用这个。
